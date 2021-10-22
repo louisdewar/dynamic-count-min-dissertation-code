@@ -167,10 +167,10 @@ BOBHash::BOBHash(uint primeNum)
 	this->primeNum = primeNum;
 }
 
-void BOBHash::initialize(uint primeNqueriesum)
+void BOBHash::initialize(uint primeNum)
 {
 	assert(primeNum < 1229 && "initialize: seed too big for Bob!");
-	// this->primeNum = primeNum;
+	this->primeNum = primeNum;
 }
 
 uint BOBHash::run(const char * str, uint len)
