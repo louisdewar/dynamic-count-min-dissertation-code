@@ -1,6 +1,7 @@
-// Adapted from: https://github.com/Gavindeed/HeavyGuardian/tree/master/flow_size
+// Adapted from:
+// https://github.com/Gavindeed/HeavyGuardian/tree/master/flow_size
 
-#pragma once 
+#pragma once
 
 #ifndef BOB_HASH_H
 #define BOB_HASH_H
@@ -9,23 +10,18 @@
 
 typedef unsigned int uint;
 
-class BOBHash
-{
+class BOBHash {
 
 public:
+  BOBHash();
+  ~BOBHash();
+  BOBHash(uint primeNum);
+  void initialize(uint primeNum);
+  uint run(const char *str, uint len);
 
-	BOBHash();
-	~BOBHash();
-	BOBHash(uint primeNum);
-	void initialize(uint primeNum);
-	uint run(const char * str, uint len);
-
-	uint primeNum;
+  uint primeNum;
 
 private:
-
-	
-
 };
 
 #endif // !BOB_HASH_H
