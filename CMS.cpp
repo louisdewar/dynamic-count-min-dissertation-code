@@ -114,7 +114,7 @@ void CountMinFlat::initialize(int width, int hash_count, int seed)
 
 	for (int i = 0; i < hash_count; ++i)
 	{
-		bobhash[i].initialize(seed + i);
+		bobhash[i].initialize(seed*(7 + i) + i + 100);
 	}
 }
 
