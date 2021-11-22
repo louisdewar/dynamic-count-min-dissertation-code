@@ -99,19 +99,15 @@ void genzipf(const char* file_name, unsigned int seed, float alpha, int n, unsig
 	// Generate and output zipf random variables
 	for (i = 0; i < num_values; i++)
 	{
-		printf("test (loop)\n");
 		zipf_rv = zipf(alpha, n);
-		printf("test2 (loop) %i\n", zipf_rv);
 
 		char flag = 0xFF;
 
-		printf("test3 (loop)\n");
+		// Why write the same number 3 times?
 		fwrite(&zipf_rv, sizeof(int), 1, fp);
-		printf("test4 (loop)\n");
 		fwrite(&zipf_rv, sizeof(int), 1, fp);
 		fwrite(&zipf_rv, sizeof(int), 1, fp);
 		fwrite(&flag, sizeof(char), 1, fp);
-		printf("test5 (loop)\n");
 		
 		if (i % 1000000 == 0)
 		{

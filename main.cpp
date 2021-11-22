@@ -2,85 +2,10 @@
 #include "genzipf.h"
 #include <iostream>
 #include <string.h>
+#include "TraceReader.hpp"
+#include <math.h>
 
-int test_baseline_cms_simple() {
-  CountMinBaseline *cms = new CountMinBaseline();
-  cms->initialize(16, 4, 577);
-  // Create packets where the first bytes are different (the rest of the packet
-  // src will be 0s)
-  const char srcA[FT_SIZE] = {'A'};
-  const char srcB[FT_SIZE] = {'B'};
-  const char srcC[FT_SIZE] = {'C'};
-
-  // Ratio A:B:C = 3:2:1
-  for (int i = 0; i < 10000; i++) {
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
-
-    cms->increment((char *)&srcB);
-    cms->increment((char *)&srcB);
-
-    cms->increment((char *)&srcC);
-  }
-
-  int cmsA = cms->query((char *)&srcA);
-  int cmsB = cms->query((char *)&srcB);
-  int cmsC = cms->query((char *)&srcC);
-  printf("A: ");
-  cms->print_indexes(srcA);
-  printf("B: ");
-  cms->print_indexes(srcB);
-  printf("C: ");
-  cms->print_indexes(srcC);
-
-  if (cmsA != 30000 || cmsB != 20000 || cmsC != 10000) {
-    printf("A: %i, B: %i, C: %i\n", cmsA, cmsB, cmsC);
-    return -1;
-  }
-
-  return 0;
-}
-
-int test_flat_cms_simple() {
-  CountMinFlat *cms = new CountMinFlat();
-  cms->initialize(32, 5, 1);
-  // Create packets where the first bytes are different (the rest of the packet
-  // src will be 0s)
-  const char srcA[FT_SIZE] = {'A'};
-  const char srcB[FT_SIZE] = {'B'};
-  const char srcC[FT_SIZE] = {'C'};
-
-  // Ratio A:B:C = 3:2:1
-  for (int i = 0; i < 10000; i++) {
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
-
-    cms->increment((char *)&srcB);
-    cms->increment((char *)&srcB);
-
-    cms->increment((char *)&srcC);
-  }
-
-  int cmsA = cms->query((char *)&srcA);
-  int cmsB = cms->query((char *)&srcB);
-  int cmsC = cms->query((char *)&srcC);
-
-  printf("A: ");
-  cms->print_indexes(srcA);
-  printf("B: ");
-  cms->print_indexes(srcB);
-  printf("C: ");
-  cms->print_indexes(srcC);
-
-  if (cmsA != 30000 || cmsB != 20000 || cmsC != 10000) {
-    printf("A: %i, B: %i, C: %i\n", cmsA, cmsB, cmsC);
-    return -1;
-  }
-
-  return 0;
-}
+#include "experiment.hpp"
 
 int main(int argc, char **argv) {
   if (argc < 2) {
@@ -103,9 +28,32 @@ int main(int argc, char **argv) {
 
     printf("test successful\n");
   } else if (strcmp("genzipf", argv[1]) == 0) {
-    int seed = 879;
-    const char *zipfPath = "zipf.data";
-    genzipf(zipfPath, seed, 0.9, 1 << 24, 100000);
+    if (argc < 6) {
+      printf("Missing arguments for genzipf [output_path] [number of packets] [skew] [seed]\n");
+      return -1;
+    }
+
+    char* zipfPath = argv[2];
+    int packetNumber = stoi(argv[3]);
+    double skew = stod(argv[4]);
+    int seed = stoi(argv[5]);
+    genzipf(zipfPath, seed, skew, 1 << 26, packetNumber);
+  } else if (strcmp("experiment", argv[1]) == 0) {
+    if (argc < 4) {
+      printf("Missing arguments to experiment\n");
+      return -1;
+    }
+
+
+    int hashFunctions = 1;
+    for (int i = 0; i < 5; i++) {
+      std::string fileName = argv[3];
+      fileName += "-";
+      fileName += std::to_string(hashFunctions);
+      fileName += ".csv";
+      run_experiment(argv[2], fileName.c_str(), hashFunctions);
+      hashFunctions *= 2;
+    }
   } else {
     printf("Unrecognised command %s\n", argv[1]);
     return -1;
