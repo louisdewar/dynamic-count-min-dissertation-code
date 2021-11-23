@@ -15,6 +15,7 @@ class PacketCounter {
     // Only uses the first 4 bytes
     int increment(char* str);
     int query(char* str);
+    int query_index(int index);
 
     void reset();
   private:

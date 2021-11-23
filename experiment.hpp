@@ -5,41 +5,7 @@
 #include "TraceReader.hpp"
 #include "CMS.hpp"
 #include "Counter.hpp"
-//#include <unordered_map>
 
-// template<>
-// struct std::hash<char[FT_SIZE]>
-// {
-//   std::size_t operator()(const char *k[FT_SIZE]) const
-//   {
-//     using std::size_t;
-// 
-//     size_t hash = 0;
-//     for (int i = 0; i < FT_SIZE; i++) {
-//       size_t x = std::hash<char>{}(*k[i]);
-//       hash = (hash << 1) ^ x;
-//     }
-// 
-//     return hash;
-//   }
-// };
-// 
-// struct PacketHash
-// {
-//   template<char[FT_SIZE]>
-//     std::size_t operator()(const char *(k[FT_SIZE])) const
-//   {
-//     using std::size_t;
-// 
-//     size_t hash = 0;
-//     for (int i = 0; i < FT_SIZE; i++) {
-//       size_t x = std::hash<char>{}(*k[i]);
-//       hash = (hash << 1) ^ x;
-//     }
-// 
-//     return hash;
-//   }
-// };
 
 
 
@@ -122,6 +88,77 @@ int test_flat_cms_simple() {
   return 0;
 }
 
+// Mem = counters (1 counter = 4 bytes)
+void run_experiment_fixed_mem(char* zipfPath, FILE* results, int hashFunctions, int mem) {
+  PacketCounter* counter = new PacketCounter(1 << 26);
+
+  ZipfReader* reader = new ZipfReader(zipfPath);
+  CountMinBaseline* sketch = new CountMinBaseline();
+  sketch->initialize(mem / hashFunctions, hashFunctions, 40);
+
+  long long sum_sq_err = 0;
+  long long n = 0;
+
+  while (true) {
+    char dest[FT_SIZE] = {};
+    int ret = reader->read_next_packet(dest);
+
+    // Reached end
+    if (ret < FT_SIZE) {
+      break;
+    }
+
+    if (ret != FT_SIZE) {
+      throw std::runtime_error("Failed sanity check - read incorrect number of bytes");
+    }
+
+    sketch->increment(dest);
+    int actual = counter->increment(dest);
+    int countMin = sketch->query(dest);
+
+
+    if (countMin < actual) {
+      throw std::runtime_error("Failed sanity check - count min undercounted true value");
+    }
+
+    sum_sq_err += (long long) (countMin - actual) * (countMin - actual);
+    n++;
+  }
+
+  long double inv_n = 1.0 / (long double) n;
+  long double normalized_error = inv_n * sqrt(inv_n * (long double) sum_sq_err);
+
+  int threshold = n / 1000;
+
+  long double heavy_hitter_err = 0.0;
+  int i = 1;
+  char* packet = new char[FT_SIZE];
+  packet[12] = (char) 255;
+
+
+  printf("Calculating heavy hitters for hash functions = %i\n", hashFunctions);
+  while(counter->query_index(i) > threshold) {
+    int* packetCast = (int*) packet;
+
+    packetCast[0] = i;
+    packetCast[1] = i;
+    packetCast[2] = i;
+
+    int actual = counter->query_index(i);
+    int countMin = sketch->query(packet);
+
+    long double err = (long double) actual - (long double) countMin;
+    heavy_hitter_err += err * err;
+
+    assert(i <= n / threshold);
+    i++;
+  }
+
+  heavy_hitter_err = sqrt(heavy_hitter_err);
+
+  fprintf(results, "%d,%Lf\n", hashFunctions, heavy_hitter_err);
+}
+
 void run_experiment(char* zipfPath, const char* resultsPath, int hashFunctions) {
   int size = 128;
   const int maxSize = 1024 * 256;
@@ -132,7 +169,7 @@ void run_experiment(char* zipfPath, const char* resultsPath, int hashFunctions) 
   FILE* results = fopen(resultsPath,"w");
   fprintf(results, "memory,normalized error\n");
 
-  size_t cap = 1 << 28;
+  //size_t cap = 1 << 28;
   //HashMapCounter* counter = new HashMapCounter(cap, 101);
   PacketCounter* counter = new PacketCounter(1 << 26);
   //unordered_map<char[FT_SIZE], long, PacketHash> counter;

@@ -42,7 +42,7 @@ def genzipf(n_samples):
 
     # Multiplied by 10 to prevent floating point errors
     skew_delta = 1
-    skew_start = 9
+    skew_start = 6
     skew_end = 13
     seed = 750
 
@@ -61,6 +61,11 @@ def test_traces_task(trace):
 
     run_bin(["experiment", os.path.join("traces", trace), os.path.join("results", basename)])
 
+def test_traces_fixed_mem_task(trace, output, mem):
+    # Get the trace file name without the extension to use as the base
+    basename = os.path.splitext(os.path.basename(trace))[0]
+
+    run_bin(["test_traces_fixed_mem", os.path.join("traces", trace), os.path.join(output, "original", basename), mem])
 
 def test_traces():
     files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
@@ -71,12 +76,65 @@ def test_traces():
     run_tasks(tasks)
 
 def test_traces_fixed_mem(output):
-    files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
-    print("Testing all traces ({}) in the `traces` folder (fixed mem varying skew)".format(len(files)))
+    output = os.path.join("results", output)
 
-    tasks = [(test_traces_task, [trace]) for trace in files]
+    if os.path.exists(output):
+        shutil.rmtree(output)
+    os.makedirs(os.path.join(output, "original"))
+    os.makedirs(os.path.join(output, "transformed"))
+    mem = 2 ** 8;
+
+    files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
+    print("Testing all traces ({}) in the `traces` folder (fixed mem = {} bytes w/ varying skew)".format(len(files), mem))
+    print("Output location =", output)
+
+    tasks = [(test_traces_fixed_mem_task, [trace, output, mem]) for trace in files]
 
     run_tasks(tasks)
+
+
+    results = { os.path.basename(file).split("-")[2]: os.path.join(output, "original", file) for file in os.listdir(os.path.join(output, "original")) }
+
+    print(results)
+
+    skews = sorted(list(map(lambda key: float(key), results.keys())))
+
+    hash_counts = []
+
+    # Open one of the skews to get the hash functions
+    with open(results[str(skews[0])], "r") as trace:
+        lines = trace.read().splitlines()
+        for line in lines:
+            try:
+                hash_count = int(line.split(',')[0])
+                hash_counts.append(hash_count)
+            except ValueError:
+                # There's always a label which can't be converted to an int
+                continue
+
+
+    files = { hash_count: open(os.path.join(output, "transformed", "trace-{}.csv".format(hash_count)), "w") for hash_count in hash_counts }
+
+    # Write CSV header to all the output files
+    for count, file in files.items():
+        file.write("skew,normalized error\n")
+
+    for skew in skews:
+        with open(results[str(skew)], "r") as trace:
+            lines = trace.read().splitlines()
+            for line in lines:
+                try:
+                    hash_count = int(line.split(',')[0])
+                except ValueError:
+                    # There's always a label which can't be converted to an int
+                    continue
+
+                error = line.split(',')[1]
+
+                files[hash_count].write("{},{}\n".format(skew, error))
+
+    for count, file in files.items():
+        file.close()
 
 
 if __name__ == "__main__":
@@ -105,6 +163,6 @@ if __name__ == "__main__":
             sys.exit(1)
 
         output = sys.argv[2]
-        genzipf(output)
+        test_traces_fixed_mem(output)
 
 
