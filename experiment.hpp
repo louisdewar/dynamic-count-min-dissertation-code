@@ -154,7 +154,7 @@ void run_experiment_fixed_mem(char* zipfPath, FILE* results, int hashFunctions, 
     i++;
   }
 
-  heavy_hitter_err = sqrt(heavy_hitter_err);
+  heavy_hitter_err = sqrt(heavy_hitter_err / (long double) i);
 
   fprintf(results, "%d,%Lf\n", hashFunctions, heavy_hitter_err);
 }
