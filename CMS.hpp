@@ -14,6 +14,7 @@
 
 #include "BobHash.hpp"
 #include "Defs.hpp"
+#include "topK.hpp"
 
 using namespace std;
 
@@ -31,9 +32,9 @@ class CountMinBaseline {
 
   BOBHash *bobhash;
 
+public:
   uint32_t **baseline_cms;
 
-public:
   CountMinBaseline();
   ~CountMinBaseline();
 
@@ -60,6 +61,30 @@ public:
   ~CountMinFlat();
 
   void initialize(int width, int hash_count, int seed);
+  void increment(const char *str);
+  uint64_t query(const char *str);
+
+  void print_indexes(const char *str);
+};
+
+class CountMinTopK {
+
+  int width;
+  int height;
+
+  int width_mask;
+
+  BOBHash *bobhash;
+  orderedMapTopK<int, uint32_t> *topK;
+
+public:
+  uint32_t **baseline_cms;
+
+  // We keep track of the k top elements.
+  CountMinTopK(int k);
+  ~CountMinTopK();
+
+  void initialize(int width, int height, int seed);
   void increment(const char *str);
   uint64_t query(const char *str);
 
