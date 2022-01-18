@@ -75,9 +75,9 @@ class CountMinTopK {
   int width_mask;
 
   BOBHash *bobhash;
-  orderedMapTopK<int, uint32_t> *topK;
 
 public:
+  orderedMapTopK<int, uint32_t> *topK;
   uint32_t **baseline_cms;
 
   // We keep track of the k top elements.

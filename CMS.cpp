@@ -163,10 +163,19 @@ void CountMinTopK::initialize(int width, int height, int seed) {
 }
 
 void CountMinTopK::increment(const char *str) {
+  uint index = (bobhash[0].run(str, FT_SIZE)) & width_mask;
+  uint64_t min = baseline_cms[0][index];
+
   for (int i = 0; i < height; ++i) {
     uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
-    ++baseline_cms[i][index];
+    uint64_t temp = ++baseline_cms[i][index];
+    if (min > temp) {
+      min = temp;
+    }
   }
+
+  // for the synthetic data the first 4 bytes are enough to differentiate
+  this->topK->update(*(int *)str, min);
 }
 
 uint64_t CountMinTopK::query(const char *str) {

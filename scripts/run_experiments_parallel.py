@@ -4,6 +4,8 @@ import subprocess
 import os
 import shutil
 import sys
+from process import average_results, lowest_error, transform_results, generate_graph
+
 
 def run_task(task):
     task[0](*task[1])
@@ -27,10 +29,37 @@ def run_bin(args):
     print('Running: ', ' '.join(["builddir/fyp", *args]))
     subprocess.run(["builddir/fyp", *args])
 
+class Trace:
+    def __init__(self, seed: str, path: str):
+        self.seed = seed
+        self.path = path
+
+def find_traces() -> dict[str, list[Trace]]:
+    traces = {}
+    for entry in os.scandir("traces"):
+        if not entry.is_dir():
+            continue
+
+        seed = entry.name.split("-")[1]
+
+        for trace in os.listdir(entry):
+            if not trace.endswith(".data"):
+                continue
+
+            basename = trace[:-5]
+            parts = basename.split("-")
+            skew = parts[2]
+
+            if not skew in traces:
+                traces[skew] = []
+
+            traces[skew].append(Trace(seed, os.path.join(entry, trace)))
+    
+    return traces
+
 
 def genzip_task(skew, n_samples, seed):
-    run_bin(["genzipf", f"traces/trace-{n_samples}-{skew}.data", n_samples, skew, seed])
-
+    run_bin(["genzipf", f"traces/seed-{seed}/trace-{n_samples}-{skew}.data", n_samples, skew, seed])
 
 def genzipf(n_samples):
     print("Generating zipf traces into `traces` folder")
@@ -43,14 +72,17 @@ def genzipf(n_samples):
     skew_delta = 1
     skew_start = 6
     skew_end = 13
-    seed = 750
 
-    skew = skew_start
+    seeds = [100, 211, 356, 439, 578]
 
     tasks = []
-    while skew <= skew_end:
-        tasks.append((genzip_task, [skew / 10, n_samples, seed]))
-        skew += skew_delta
+    for seed in seeds:
+        skew = skew_start
+        os.makedirs(f"traces/seed-{seed}/")
+
+        while skew <= skew_end:
+            tasks.append((genzip_task, [skew / 10, n_samples, seed]))
+            skew += skew_delta
 
     run_tasks(tasks)
 
@@ -60,11 +92,8 @@ def test_traces_task(trace):
 
     run_bin(["experiment", os.path.join("traces", trace), os.path.join("results", basename)])
 
-def test_traces_fixed_mem_task(trace, output, mem):
-    # Get the trace file name without the extension to use as the base
-    basename = os.path.splitext(os.path.basename(trace))[0]
-
-    run_bin(["test_traces_fixed_mem", os.path.join("traces", trace), os.path.join(output, "original", basename), mem])
+def test_traces_fixed_mem_task(trace, output, mem, alpha):
+    run_bin(["test_traces_fixed_mem", trace, output, mem, alpha])
 
 def test_traces():
     files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
@@ -74,208 +103,196 @@ def test_traces():
 
     run_tasks(tasks)
 
-def test_traces_fixed_mem(output):
-    output = os.path.join("results", output)
+def test_traces_fixed_mem(output_dir, mem_pow, alpha):
+    output_dir = os.path.join("results", output_dir)
+    averaged_dir = os.path.join(output_dir, "averaged")
 
-    if os.path.exists(output):
-        shutil.rmtree(output)
-    os.makedirs(os.path.join(output, "original"))
-    os.makedirs(os.path.join(output, "transformed"))
-    mem = 2 ** 16
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(os.path.join(output_dir, "original"))
+    os.makedirs(os.path.join(output_dir, "transformed"))
+    os.makedirs(averaged_dir)
 
-    files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
-    print("Testing all traces ({}) in the `traces` folder (fixed mem = {} bytes w/ varying skew)".format(len(files), mem))
-    print("Output location =", output)
+    mem = 2 ** mem_pow
 
-    tasks = [(test_traces_fixed_mem_task, [trace, output, mem]) for trace in files]
+    skew_traces = find_traces()
+
+    tasks = []
+    average_groups = {}
+    for skew, traces in skew_traces.items():
+        group_key = f"skew-{skew}-fixed_mem.csv"
+        average_groups[group_key] = []
+
+        for trace in traces:
+            output_file = os.path.join(output_dir, "original", f"seed-{trace.seed}-skew-{skew}-mem-{mem}.csv")
+            tasks.append((test_traces_fixed_mem_task, [trace.path, output_file, mem, alpha]))
+            average_groups[group_key].append(output_file)
 
     run_tasks(tasks)
+    average_results(averaged_dir, average_groups, ["normalized error", "heavy hitter error", "sketch error"])
 
-    results = { os.path.basename(file).split("-")[2]: os.path.join(output, "original", file) for file in os.listdir(os.path.join(output, "original")) }
+    results = { os.path.basename(file).split("-")[1]: os.path.join(averaged_dir, file) for file in os.listdir(averaged_dir) }
 
+    resultsKeysOrdered = list(results.keys())
+    resultsKeysOrdered.sort(key=lambda key: float(key))
 
-    columns = transform_results(results, "skew", os.path.join(output, "transformed"))
+    columns = transform_results(results, resultsKeysOrdered, "skew", os.path.join(output_dir, "transformed"))
 
-    for _, column in columns.items():
+    for column_name, column in columns.items():
         column_path = column["path"]
         files = column["files"]
-        output = os.path.join(column_path, "graph.png")
-        generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, output)
-        print(f'Generated graph at {output}')
+        lowest_error_file = os.path.join(column_path, "lowest_error.csv")
+        lowest_error(files, "skew", "hash functions", column_name, lowest_error_file)
+
+        plot_output = os.path.join(column_path, "lowest_error.png")
+        subprocess.run(["/bin/sh", "-c", f"graph {lowest_error_file} -o {plot_output} -x skew -y 'hash functions'"])
+        print(f'Generated graph at {plot_output}')
+
+        plot_output = os.path.join(column_path, "graph.png")
+        generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, plot_output)
+        print(f'Generated graph at {plot_output}')
+
 
 def test_trace_fixed_alpha_task(output, trace, alpha, mem):
-    run_bin(["test_trace_fixed_alpha", trace, os.path.join(output, "original", f"alpha-{alpha}-counters-{mem}-.csv"), alpha, mem])
+    run_bin(["test_trace_fixed_alpha", trace, output, alpha, mem])
 
-def test_trace_fixed_alpha(output, trace, alpha, startPow, endPow):
-    output = os.path.join("results", output)
+def test_skew_fixed_alpha(output_dir, skew, alpha, startMemPow, endMemPow):
+    output_dir = os.path.join("results", output_dir)
+    averaged_dir = os.path.join(output_dir, "averaged")
 
-    if os.path.exists(output):
-        shutil.rmtree(output)
-    os.makedirs(os.path.join(output, "original"))
-    os.makedirs(os.path.join(output, "transformed"))
-    mem = 2 ** (startPow);
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(os.path.join(output_dir, "original"))
+    os.makedirs(os.path.join(output_dir, "transformed"))
+    os.makedirs(averaged_dir)
+
+    mem = 2 ** (startMemPow);
 
     tasks = []
 
-    for i in range(startPow, endPow + 1):
+    traces = find_traces()[skew]
+
+    # Used for averaging across traces
+    result_groups = {}
+    for i in range(startMemPow, endMemPow + 1):
         mem = 2 ** i
-        tasks.append((test_trace_fixed_alpha_task, [output, trace, alpha, mem]))
+        group_key = f"alpha-{alpha}-counters-{mem}-.csv"
+        result_groups[group_key] = []
+        for trace in traces:
+            output_path = os.path.join(output_dir, "original", f"counters-{mem}-seed-{trace.seed}.csv")
+            result_groups[group_key].append(output_path)
+            tasks.append((test_trace_fixed_alpha_task, [output_path, trace.path, alpha, mem]))
 
     run_tasks(tasks)
 
-    results = { os.path.basename(file).split("-")[3]: os.path.join(output, "original", file) for file in os.listdir(os.path.join(output, "original")) }
+    average_results(averaged_dir, result_groups, ["normalized error", "heavy hitter error", "sketch error"])
 
-    columns = transform_results(results, "counters", os.path.join(output, "transformed"))
+    results = { os.path.basename(file).split("-")[3]: os.path.join(averaged_dir, file) for file in os.listdir(averaged_dir) }
+
+    resultsKeysOrdered = list(results.keys())
+    resultsKeysOrdered.sort(key=lambda key: float(key))
+
+    columns = transform_results(results, resultsKeysOrdered, "counters", os.path.join(output_dir, "transformed"))
 
     for _, column in columns.items():
         column_path = column["path"]
         files = column["files"]
-        output = os.path.join(column_path, "graph.png")
-        generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, output)
-        print(f'Generated graph at {output}')
-    # skews = sorted(list(map(lambda key: float(key), results.keys())))
+        output_dir = os.path.join(column_path, "graph.png")
+        generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, output_dir)
+        print(f'Generated graph at {output_dir}')
 
-    # hash_counts = []
-    # columns = []
+        generate_lowest_error_report(files, [0.0, 0.05], column_path)
 
-    # # Open one of the skews to get the hash functions
-    # with open(results[str(skews[0])], "r") as trace:
-    #     lines = trace.read().splitlines()
-    #     header = lines[0].split(',')
-
-    #     columns = header[1:]
-
-    #     for line in lines[1:]:
-    #         hash_count = int(line.split(',')[0])
-    #         hash_counts.append(hash_count)
-
-    # print("Processing the following different metrics", columns)
-
-    # column_paths = [os.path.join(output, "transformed", column.replace(" ", "-")) for column in columns]
-
-    # for column_path in column_paths:
-    #     # This is only here because sometimes for debugging I remove the code above in order to skip re-running the data
-    #     if os.path.exists(column_path):
-    #         shutil.rmtree(column_path)
-
-    #     os.makedirs(column_path)
-
-    # files = [{ hash_count: open(os.path.join(column_path, "trace-{}.csv".format(hash_count)), "w") for hash_count in hash_counts } for column_path in column_paths]
-
-    # # Write CSV header to all the output files
-    # for column_index, column in enumerate(columns):
-    #     for _, file in files[column_index].items():
-    #         file.write("skew,{}\n".format(column))
-
-    # for skew in skews:
-    #     with open(results[str(skew)], "r") as trace:
-    #         lines = trace.read().splitlines()
-    #         for line in lines:
-    #             try:
-    #                 hash_count = int(line.split(',')[0])
-    #             except ValueError:
-    #                 # There's always a label which can't be converted to an int
-    #                 continue
-
-    #             values = line.split(',')[1:]
-
-    #             for column, value in enumerate(values):
-    #                 files[column][hash_count].write("{},{}\n".format(skew, value))
-
-    # for column in files:
-    #     for _, file in column.items():
-    #         file.close()
+def generate_lowest_error_report(files, margins, output_base):
+    file_data = []
+    for file_label, path in files.items():
+        with open(path, "r") as f:
+            file_data.append({ "label": file_label, "rows": [line.split(',') for line in f.read().splitlines()[1:]] })
     
-    # for column_index, column in enumerate(columns):
-    #     column_path = column_paths[column_index]
-    #     output = os.path.join(column_path, "graph.png")
-    #     generate_graph({ f"n={hash_count}": file.name for hash_count, file in files[column_index].items() }, output)
-    #     print(f'Generated graph at {output}')
+    margin_results = [{ "margin": margin, "labels": {data["label"]: [] for data in file_data } } for margin in margins]
+    for row in range(0, len(file_data[0]["rows"])):
+        values = [{ "x": float(data["rows"][row][0]), "y": float(data["rows"][row][1]), "label": data["label"] } for data in file_data]
+        lowest_value = values[0]["y"]
+
+        for value in values:
+            if value["y"] < lowest_value:
+                lowest_value = value["y"]
+
+        for margin_i, margin in enumerate(margins):
+            threshold = lowest_value * (1 + margin)
+
+            for value in values:
+                if value["y"] <= threshold:
+                    margin_results[margin_i]["labels"][value["label"]].append(value["x"])
+
+        
+
+    with open(os.path.join(output_base, "margin_report.txt"), "w") as f:
+        f.write("""\
+Margin report
+=============
+
+Margin: | Results within margin% of the lowest error:
+""")
+        for result in margin_results:
+            margin = 100 * result["margin"]
+            f.write(f"{margin}%  | ")
+
+            for label, values_within_threshold in result["labels"].items():
+                if len(values_within_threshold) > 0:
+                    within_threshold = ', '.join(map(lambda val: str(val), values_within_threshold))
+                    f.write(f" - {label} ({within_threshold})")
+
+            f.write("\n")
 
 
-# Results should be a dictionary where the key is what becomes the transformed x component and the value is the file containing that data.
-# This outputs files to `{output_base}/{column_header}/trace-{x_i}.csv` (x_i is from the original traces x values).
-# All input files must have the same x values and same column headers (or at least labelled identically after the x column).
-# Returns a dictionary where the key is the extracted column names and the value is a dictionary with two keys `path` (the directory where the files are contained)
-# and `files` (a dictionary of x_value to path)
-def transform_results(results, results_key_header, output_base):
-    # == Get column names and create files with headers
+def top_k_task(trace, output, k, mem, hash_functions):
+    run_bin(["test_top_k", trace, output, k, mem, hash_functions])
 
-    # Look at one particular results file:
+# Tests top k on all the traces
+def test_top_k(output_dir, k, mem_pow, hash_functions):
+    output_dir = os.path.join("results", output_dir)
+    averaged_dir = os.path.join(output_dir, "averaged")
+    original_dir = os.path.join(output_dir, "original")
+
+
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+    os.makedirs(averaged_dir)
+    os.makedirs(original_dir)
+    mem = 2 ** mem_pow
+
+    files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
+    print("Running all traces ({}) in the `traces` folder".format(len(files)))
+    print("Output location =", output_dir)
+
+    skew_traces = find_traces()
+
+    tasks = []
+    average_groups = {}
+    for skew, traces in skew_traces.items():
+        group_key = f"top-{k}-hash-{hash_functions}-skew-{skew}-top_k.csv"
+        average_groups[group_key] = []
+
+        for trace in traces:
+            output_file = os.path.join(original_dir, f"top-{k}-hash-{hash_functions}-seed-{trace.seed}-skew-{skew}.csv")
+            tasks.append((top_k_task, [trace.path, output_file, k, mem, hash_functions]))
+            average_groups[group_key].append(output_file)
     
-    columns = {}
-    print(results.keys())
-    # NOTE: trace is probably used incorrectly here (it should probably be results but I need a unique name)
-    with open(results[next(iter(results.keys()))], "r") as trace:
-        lines = trace.read().splitlines()
-        headers = [header.replace(" ", "-") for header in lines[0].split(',')]
-        x_header = headers[0]
-        headers = headers[1:]
+    #tasks = [(top_k_task, [trace, os.path.join(output_dir, f"top-{k}-hash-{hash_functions}-{os.path.basename(trace).removesuffix('.data')}.csv"), k, mem, hash_functions]) for trace in files]
 
-        print("Found the following headers:", headers)
+    run_tasks(tasks)
 
-        # the x values get split into individual files to each column, where the file has the x value in its name
-        x_values = []
-        for line in lines[1:]:
-            x_values.append(line.split(',')[0])
+    average_results(averaged_dir, average_groups, ["frequency"])
 
-        for column in headers:
-            column_path = os.path.join(output_base, column)
+    results = { os.path.basename(file).removesuffix(".csv"): os.path.join(averaged_dir, file) for file in average_groups.keys() }
 
-            if os.path.exists(column_path):
-                shutil.rmtree(column_path)
-            os.makedirs(column_path)
+    for key, file in results.items():
+        graph_output = os.path.join(output_dir, key + ".png")
+        print(f"Generating histogram {graph_output}")
+        subprocess.run(["/bin/sh", "-c", f"graph '{file}' --hist -o '{graph_output}'"])
 
-            columns[column] = {
-                "path": column_path,
-                "files": { x_value: open(os.path.join(column_path, f"trace-{x_value}-{x_header}.csv"), "w") for x_value in x_values }
-            }
-
-            for file in columns[column]["files"].values():
-                # Add headers to files
-                file.write(f"{results_key_header},{column}\n")
-
-    # == Go over each pre-transformed file and map it to the new files
-    for key, input_path in results.items():
-        with open(input_path, "r") as trace:
-            lines = trace.read().splitlines()
-            headers = [header.replace(" ", "-") for header in lines[0].split(',')]
-
-            for line in lines[1:]:
-                line = line.split(",")
-                x_value = line[0]
-
-                for column_index in range(1, len(headers)):
-                    column_name = headers[column_index]
-                    column_value = line[column_index]
-
-                    columns[column_name]["files"][x_value].write(f"{key},{column_value}\n")
-
-    # == Close all the files
-    for column in columns.values():
-        for x_value,file in column["files"].items():
-            path = file.name
-            file.close()
-            # Map the file to the path (we return this value)
-            column["files"][x_value] = path
-            
-        # columns = { [name]: { path: os.path.join(output_base, name), files: { [x_value]: { file: open(os.path.join(output_base, name, f"trace-{x_value}-{x_header}.csv"), "w") } for x_value in x_values } } for name in headers }
-
-    #return { [column_name]: column["path"] for column_name, column in columns.items() }
-    return columns
-
-# Requires: `pip install graph-cli`
-# There appears to be a bug with this tool such that the labels for the x-y axis are swapped
-def generate_graph(files, output):
-    commandparts = []
-    for label, file in files.items():
-        commandparts.append(f"graph {file} --marker='' --legend='{label}'")
-
-    command = " --chain | ".join(commandparts)
-    command += f" -o {output}"
-
-    subprocess.run(["/usr/bin/sh", "-c", command])
-    
 
 if __name__ == "__main__":
     abspath = os.path.abspath(__file__)
@@ -298,15 +315,17 @@ if __name__ == "__main__":
     elif experiment == "test_traces":
         test_traces()
     elif experiment == "test_traces_fixed_mem":
-        if len(sys.argv) < 3:
+        if len(sys.argv) < 5:
             print("Missing arguments for test_traces_fixed_mem")
             sys.exit(1)
 
         output = sys.argv[2]
-        test_traces_fixed_mem(output)
-    elif experiment == "test_trace_fixed_alpha":
+        mem_pow = int(sys.argv[3])
+        alpha = sys.argv[4]
+        test_traces_fixed_mem(output, mem_pow, alpha)
+    elif experiment == "test_skew_fixed_alpha":
         if len(sys.argv) < 7:
-            print("Missing arguments for test_trace_fixed_alpha")
+            print("Missing arguments for test_skew_fixed_alpha")
             sys.exit(1)
 
         trace = sys.argv[2]
@@ -314,7 +333,19 @@ if __name__ == "__main__":
         alpha = sys.argv[4]
         startPow = int(sys.argv[5])
         endPow = int(sys.argv[6])
-        test_trace_fixed_alpha(output, trace, alpha, startPow, endPow)
+        test_skew_fixed_alpha(output, trace, alpha, startPow, endPow)
+    elif experiment == "test_top_k":
+        if len(sys.argv) < 6:
+            print("Missing arguments for test_top_k")
+            sys.exit(1)
 
+        k = int(sys.argv[2])
+        mem_pow = int(sys.argv[3])
+        hash_functions = int(sys.argv[4])
+        output = sys.argv[5]
+        test_top_k(output, k, mem_pow, hash_functions)
+    else:
+        print(f"Unrecognised command {experiment}")
+        sys.exit(1)
 
 

@@ -1,2 +1,5 @@
 results
 traces
+
+**/.ccls-cache
+**/__pycache__

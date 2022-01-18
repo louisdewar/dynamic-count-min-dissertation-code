@@ -48,8 +48,8 @@ int test_baseline_cms_simple() {
 }
 
 int test_flat_cms_simple() {
-  CountMinFlat *cms = new CountMinFlat();
-  cms->initialize(32, 5, 1);
+  CountMinFlat cms = CountMinFlat();
+  cms.initialize(32, 5, 1);
   // Create packets where the first bytes are different (the rest of the packet
   // src will be 0s)
   const char srcA[FT_SIZE] = {'A'};
@@ -58,26 +58,26 @@ int test_flat_cms_simple() {
 
   // Ratio A:B:C = 3:2:1
   for (int i = 0; i < 10000; i++) {
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
-    cms->increment((char *)&srcA);
+    cms.increment((char *)&srcA);
+    cms.increment((char *)&srcA);
+    cms.increment((char *)&srcA);
 
-    cms->increment((char *)&srcB);
-    cms->increment((char *)&srcB);
+    cms.increment((char *)&srcB);
+    cms.increment((char *)&srcB);
 
-    cms->increment((char *)&srcC);
+    cms.increment((char *)&srcC);
   }
 
-  int cmsA = cms->query((char *)&srcA);
-  int cmsB = cms->query((char *)&srcB);
-  int cmsC = cms->query((char *)&srcC);
+  int cmsA = cms.query((char *)&srcA);
+  int cmsB = cms.query((char *)&srcB);
+  int cmsC = cms.query((char *)&srcC);
 
   printf("A: ");
-  cms->print_indexes(srcA);
+  cms.print_indexes(srcA);
   printf("B: ");
-  cms->print_indexes(srcB);
+  cms.print_indexes(srcB);
   printf("C: ");
-  cms->print_indexes(srcC);
+  cms.print_indexes(srcC);
 
   if (cmsA != 30000 || cmsB != 20000 || cmsC != 10000) {
     printf("A: %i, B: %i, C: %i\n", cmsA, cmsB, cmsC);
@@ -95,12 +95,12 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
 
   alpha *= exp(1.0);
 
-  PacketCounter *counter = new PacketCounter(1 << 26);
+  PacketCounter counter = PacketCounter(1 << 27);
 
   ZipfReader *reader = new ZipfReader(zipfPath);
-  CountMinBaseline *sketch = new CountMinBaseline();
+  CountMinBaseline sketch = CountMinBaseline();
   int width = mem / hashFunctions;
-  sketch->initialize(width, hashFunctions, 40);
+  sketch.initialize(width, hashFunctions, 40);
 
   long long sum_sq_err = 0;
   long long n = 0;
@@ -119,9 +119,9 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
           "Failed sanity check - read incorrect number of bytes");
     }
 
-    sketch->increment(dest);
-    int actual = counter->increment(dest);
-    int countMin = sketch->query(dest);
+    sketch.increment(dest);
+    int actual = counter.increment(dest);
+    int countMin = sketch.query(dest);
 
     if (countMin < actual) {
       throw std::runtime_error(
@@ -143,15 +143,15 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
   packet[12] = (char)255;
 
   printf("Calculating heavy hitters for hash functions = %i\n", hashFunctions);
-  while (counter->query_index(i) > threshold) {
+  while (counter.query_index(i) > threshold) {
     int *packetCast = (int *)packet;
 
     packetCast[0] = i;
     packetCast[1] = i;
     packetCast[2] = i;
 
-    int actual = counter->query_index(i);
-    int countMin = sketch->query(packet);
+    int actual = counter.query_index(i);
+    int countMin = sketch.query(packet);
 
     long double err = (long double)actual - (long double)countMin;
     heavy_hitter_err += err * err;
@@ -171,7 +171,7 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
     int aboveThreshold = 0;
 
     for (int counter = 0; counter < width; counter++) {
-      if (sketch->baseline_cms[row][counter] > threshold) {
+      if (sketch.baseline_cms[row][counter] > threshold) {
         aboveThreshold++;
       }
     }
@@ -182,6 +182,8 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
 
   fprintf(results, "%d,%Lf,%Lf,%Lf\n", hashFunctions, normalized_error,
           heavy_hitter_err, failure_prob);
+
+  delete reader;
 }
 
 void run_experiment(char *zipfPath, const char *resultsPath,
@@ -197,7 +199,7 @@ void run_experiment(char *zipfPath, const char *resultsPath,
 
   // size_t cap = 1 << 28;
   // HashMapCounter* counter = new HashMapCounter(cap, 101);
-  PacketCounter *counter = new PacketCounter(1 << 26);
+  PacketCounter *counter = new PacketCounter(1 << 27);
   // unordered_map<char[FT_SIZE], long, PacketHash> counter;
   while (size <= maxSize) {
     counter->reset();
@@ -254,4 +256,56 @@ void run_experiment(char *zipfPath, const char *resultsPath,
   }
 
   fclose(results);
+}
+
+void run_experiment_top_k(FILE *output, char *zipfPath, int mem, int k,
+                          int hashFunctions) {
+  PacketCounter *counter = new PacketCounter(1 << 27);
+
+  ZipfReader *reader = new ZipfReader(zipfPath);
+  CountMinTopK *sketch = new CountMinTopK(k);
+  int width = mem / hashFunctions;
+  sketch->initialize(width, hashFunctions, 40);
+
+  while (true) {
+    char dest[FT_SIZE] = {};
+    int ret = reader->read_next_packet(dest);
+
+    // Reached end
+    if (ret < FT_SIZE) {
+      break;
+    }
+
+    if (ret != FT_SIZE) {
+      throw std::runtime_error(
+          "Failed sanity check - read incorrect number of bytes");
+    }
+
+    sketch->increment(dest);
+    int actual = counter->increment(dest);
+    int countMin = sketch->query(dest);
+
+    if (countMin < actual) {
+      throw std::runtime_error(
+          "Failed sanity check - count min undercounted true value");
+    }
+  }
+
+  auto topK = sketch->topK->items();
+
+  int totalTopK = 0;
+  for (auto &count : topK) {
+    totalTopK += count.first;
+  }
+
+  fprintf(output, "index,frequency\n");
+  int i = 0;
+  for (auto &count : topK) {
+    fprintf(output, "%i,%d\n", i, count.second);
+    // fprintf(output, "%i,%f\n", i, (float)count.first / (float)totalTopK);
+    i++;
+  }
+
+  // fprintf(results, "%d,%Lf,%Lf,%Lf\n", hashFunctions, normalized_error,
+  //         heavy_hitter_err, failure_prob);
 }
