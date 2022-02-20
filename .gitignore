@@ -1,5 +1,7 @@
 results
 traces
+equinix/
+traces_converted
 
 **/.ccls-cache
 **/__pycache__

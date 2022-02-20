@@ -1,4 +1,0 @@
-Take some skew (heavy tailed one), so it will look more like our loose analysis.
-For different values of alpha we need to see if the optimal number of hash functions does not depend on memory size (approximately).
-
-Datastructure to keep the largest estimated elements (frequencies). heap data structure (maybe first 100).

@@ -45,6 +45,26 @@ public:
   void print_indexes(const char *str);
 };
 
+/// A version of count min baseline where the width does not need to be a power
+/// of 2 (NOTE: this makes indexing less efficient)
+class CountMinBaselineFlexibleWidth {
+
+  int width;
+  int height;
+
+  BOBHash *bobhash;
+
+public:
+  uint32_t **baseline_cms;
+
+  CountMinBaselineFlexibleWidth();
+  ~CountMinBaselineFlexibleWidth();
+
+  void initialize(int width, int height, int seed);
+  void increment(const char *str);
+  uint64_t query(const char *str);
+};
+
 class CountMinFlat {
 
   int width;
@@ -71,8 +91,6 @@ class CountMinTopK {
 
   int width;
   int height;
-
-  int width_mask;
 
   BOBHash *bobhash;
 

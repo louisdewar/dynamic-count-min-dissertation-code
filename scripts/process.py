@@ -1,5 +1,7 @@
 import os, shutil, subprocess
 
+from pygnuplot import gnuplot
+
 # Results should be a dictionary where the key is what becomes the transformed x component and the value is the file containing that data.
 # This outputs files to `{output_base}/{column_header}/trace-{x_i}.csv` (x_i is from the original traces x values).
 # All input files must have the same x values and same column headers (or at least labelled identically after the x column).
@@ -130,6 +132,12 @@ def generate_graph(files, output):
 
     subprocess.run(["/usr/bin/sh", "-c", command])
     
+def topk_histogram_graph(file, output, title):
+    g = gnuplot.Gnuplot(terminal='pngcairo',
+                        output=f'"{output}"')
+
+    g.cmd("set datafile separator \",\"")
+    g.plot(f"\"{file}\" using 1:4 notitle with lines", title=f"\"{title}\"")
 
 def average_results(output_dir, groups, avr_columns):
     print(f"Averaging results in the following columns: {avr_columns}")
@@ -186,3 +194,5 @@ def average_results(output_dir, groups, avr_columns):
         output_f.flush()
         output_f.close()
 
+if __name__ == '__main__':
+    topk_histogram_graph('results/top-k-100-14-8/averaged/top-100-hash-8-skew-1.1-top_k.csv', "output.png", "Histogram of topK for skew 1.1")

@@ -74,6 +74,52 @@ void CountMinBaseline::print_indexes(const char *str) {
   printf("]\n");
 }
 
+CountMinBaselineFlexibleWidth::CountMinBaselineFlexibleWidth() {}
+
+CountMinBaselineFlexibleWidth::~CountMinBaselineFlexibleWidth() {
+  for (int i = 0; i < height; ++i) {
+    delete[] baseline_cms[i];
+  }
+  delete[] bobhash;
+  delete[] baseline_cms;
+}
+
+void CountMinBaselineFlexibleWidth::initialize(int width, int height,
+                                               int seed) {
+  this->width = width;
+  this->height = height;
+
+  assert(width > 0 && "width is greater than 0");
+
+  baseline_cms = new uint32_t *[height];
+  bobhash = new BOBHash[height];
+
+  for (int i = 0; i < height; ++i) {
+    baseline_cms[i] = new uint32_t[width]();
+    bobhash[i].initialize(seed * (7 + i) + i + 100);
+  }
+}
+
+void CountMinBaselineFlexibleWidth::increment(const char *str) {
+  for (int i = 0; i < height; ++i) {
+    uint index = (bobhash[i].run(str, FT_SIZE)) % width;
+    ++baseline_cms[i][index];
+  }
+}
+
+uint64_t CountMinBaselineFlexibleWidth::query(const char *str) {
+  uint index = (bobhash[0].run(str, FT_SIZE)) % width;
+  uint64_t min = baseline_cms[0][index];
+  for (int i = 1; i < height; ++i) {
+    uint index = (bobhash[i].run(str, FT_SIZE)) % width;
+    uint64_t temp = baseline_cms[i][index];
+    if (min > temp) {
+      min = temp;
+    }
+  }
+  return min;
+}
+
 CountMinFlat::CountMinFlat() {}
 
 CountMinFlat::~CountMinFlat() {
@@ -147,11 +193,7 @@ void CountMinTopK::initialize(int width, int height, int seed) {
   this->width = width;
   this->height = height;
 
-  width_mask = width - 1;
-
   assert(width > 0 && "We assume too much!");
-  assert(width % 4 == 0 && "We assume that (w % 4 == 0)!");
-  assert((width & (width - 1)) == 0 && "We assume that width is a power of 2!");
 
   baseline_cms = new uint32_t *[height];
   bobhash = new BOBHash[height];
@@ -163,11 +205,11 @@ void CountMinTopK::initialize(int width, int height, int seed) {
 }
 
 void CountMinTopK::increment(const char *str) {
-  uint index = (bobhash[0].run(str, FT_SIZE)) & width_mask;
+  uint index = (bobhash[0].run(str, FT_SIZE)) % width;
   uint64_t min = baseline_cms[0][index];
 
   for (int i = 0; i < height; ++i) {
-    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
+    uint index = (bobhash[i].run(str, FT_SIZE)) % width;
     uint64_t temp = ++baseline_cms[i][index];
     if (min > temp) {
       min = temp;
@@ -179,10 +221,10 @@ void CountMinTopK::increment(const char *str) {
 }
 
 uint64_t CountMinTopK::query(const char *str) {
-  uint index = (bobhash[0].run(str, FT_SIZE)) & width_mask;
+  uint index = (bobhash[0].run(str, FT_SIZE)) % width;
   uint64_t min = baseline_cms[0][index];
   for (int i = 1; i < height; ++i) {
-    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
+    uint index = (bobhash[i].run(str, FT_SIZE)) % width;
     uint64_t temp = baseline_cms[i][index];
     if (min > temp) {
       min = temp;
@@ -194,7 +236,7 @@ uint64_t CountMinTopK::query(const char *str) {
 void CountMinTopK::print_indexes(const char *str) {
   printf("H = [");
   for (int i = 0; i < height; ++i) {
-    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
+    uint index = (bobhash[i].run(str, FT_SIZE)) % width;
     if (i == 0) {
       printf("%i", index);
     } else {

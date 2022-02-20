@@ -4,7 +4,7 @@ import subprocess
 import os
 import shutil
 import sys
-from process import average_results, lowest_error, transform_results, generate_graph
+from process import average_results, lowest_error, transform_results, generate_graph, topk_histogram_graph
 
 
 def run_task(task):
@@ -246,52 +246,184 @@ Margin: | Results within margin% of the lowest error:
             f.write("\n")
 
 
-def top_k_task(trace, output, k, mem, hash_functions):
-    run_bin(["test_top_k", trace, output, k, mem, hash_functions])
+def top_k_task(trace, histogram_output, skew_cost_output, harmonic_estimate_output, k, mem, hash_functions):
+    run_bin(["test_top_k", trace, histogram_output, skew_cost_output, harmonic_estimate_output, k, mem, hash_functions])
 
 # Tests top k on all the traces
 def test_top_k(output_dir, k, mem_pow, hash_functions):
     output_dir = os.path.join("results", output_dir)
-    averaged_dir = os.path.join(output_dir, "averaged")
-    original_dir = os.path.join(output_dir, "original")
+    histogram_averaged_dir = os.path.join(output_dir, "averaged_histogram")
+    skew_cost_averaged_dir = os.path.join(output_dir, "averaged_skew_cost")
+    histogram_original_dir = os.path.join(output_dir, "original_histogram")
+    skew_cost_original_dir = os.path.join(output_dir, "original_skew_cost")
+    harmonic_estimate_original_dir = os.path.join(output_dir, "original_harmonic_estimate")
 
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
-    os.makedirs(averaged_dir)
-    os.makedirs(original_dir)
-    mem = 2 ** mem_pow
+    os.makedirs(histogram_averaged_dir)
+    os.makedirs(histogram_original_dir)
+    os.makedirs(skew_cost_averaged_dir)
+    os.makedirs(skew_cost_original_dir)
+    os.makedirs(harmonic_estimate_original_dir)
 
-    files = list(filter(lambda path: os.path.splitext(path)[1] == ".data", os.listdir("traces")))
-    print("Running all traces ({}) in the `traces` folder".format(len(files)))
-    print("Output location =", output_dir)
+    mem = 2 ** mem_pow
 
     skew_traces = find_traces()
 
     tasks = []
-    average_groups = {}
+    histogram_average_groups = {}
+    skew_cost_average_groups = {}
     for skew, traces in skew_traces.items():
         group_key = f"top-{k}-hash-{hash_functions}-skew-{skew}-top_k.csv"
-        average_groups[group_key] = []
+        histogram_average_groups[group_key] = []
+        skew_cost_average_groups[group_key] = []
 
         for trace in traces:
-            output_file = os.path.join(original_dir, f"top-{k}-hash-{hash_functions}-seed-{trace.seed}-skew-{skew}.csv")
-            tasks.append((top_k_task, [trace.path, output_file, k, mem, hash_functions]))
-            average_groups[group_key].append(output_file)
-    
-    #tasks = [(top_k_task, [trace, os.path.join(output_dir, f"top-{k}-hash-{hash_functions}-{os.path.basename(trace).removesuffix('.data')}.csv"), k, mem, hash_functions]) for trace in files]
+            trace_output_file_name = f"top-{k}-hash-{hash_functions}-seed-{trace.seed}-skew-{skew}.csv"
+            histogram_output = os.path.join(histogram_original_dir, trace_output_file_name)
+            skew_cost_output = os.path.join(skew_cost_original_dir, trace_output_file_name)
+            harmonic_estimate_output = os.path.join(harmonic_estimate_original_dir, trace_output_file_name)
 
+            tasks.append((top_k_task, [trace.path, histogram_output, skew_cost_output, harmonic_estimate_output, k, mem, hash_functions]))
+            histogram_average_groups[group_key].append(histogram_output)
+            skew_cost_average_groups[group_key].append(skew_cost_output)
+    
     run_tasks(tasks)
 
-    average_results(averaged_dir, average_groups, ["frequency"])
+    average_results(histogram_averaged_dir, histogram_average_groups, ["frequency"])
+    average_results(skew_cost_averaged_dir, skew_cost_average_groups, ["cost"])
 
-    results = { os.path.basename(file).removesuffix(".csv"): os.path.join(averaged_dir, file) for file in average_groups.keys() }
+    histogram_results = { os.path.basename(file).removesuffix(".csv"): os.path.join(histogram_averaged_dir, file) for file in histogram_average_groups.keys() }
+    skew_cost_results = { os.path.basename(file).removesuffix(".csv"): os.path.join(skew_cost_averaged_dir, file) for file in skew_cost_average_groups.keys() }
 
-    for key, file in results.items():
+    for key, file in histogram_results.items():
+        skew = key.split('-')[5]
         graph_output = os.path.join(output_dir, key + ".png")
         print(f"Generating histogram {graph_output}")
-        subprocess.run(["/bin/sh", "-c", f"graph '{file}' --hist -o '{graph_output}'"])
+        topk_histogram_graph(file, graph_output, f"Histogram of topK for skew f{skew}")
+
+    for key, file in skew_cost_results.items():
+        skew = key.split('-')[5]
+        graph_output = os.path.join(output_dir, "topk-skew-cost-" + key + ".png")
+        print(f"Generating skew cost graph {graph_output}")
+        subprocess.run(["/bin/sh", "-c", f"graph '{file}' -o '{graph_output}' --title 'Skew cost analysis where true skew={skew}' --figsize '1600x1000'"])
+
+
+# This command is a bit unusual in that it acts over different groups of results already produced as opposed to creating new results
+# This finds lower and upper bounds for the optimal number of hash functions across different sets of results (different counter amounts)
+# by looking at the `lower_bound.csv` in each error metric.
+# The result_dirs should be folders to the top level of the test_traces_fixed_mem results (i.e. the folder that contains the transformed folder)
+def lower_upper_bounds(output_dir, result_dirs):
+    output_dir = os.path.join("results", output_dir)
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+
+    os.makedirs(output_dir)
+    
+    metrics = {}
+
+    for result_dir in result_dirs:
+        transformed_dir = os.path.join(result_dir, "transformed")
+        if not os.path.exists(transformed_dir):
+            raise Exception(f"No `transformed` directory inside {result_dir}")
+
+        for metric in os.listdir(transformed_dir):
+            #if not metric in metrics:
+            #    metrics[metric] = { "lower": None, "upper": None }
+            with open(os.path.join(transformed_dir, metric, "lowest_error.csv"), "r") as f:
+                rows = map(lambda line: line.split(","), f.readlines()[1:])
+                rows = [[row[0], int(row[1])] for row in rows]
+
+                if not metric in metrics:
+
+                    metrics[metric] = { "lower": rows, "upper": [row.copy() for row in rows] }
+                else:
+                    lower = metrics[metric]["lower"]
+                    upper = metrics[metric]["upper"]
+
+                    for row_i, row in enumerate(rows):
+                        lower[row_i][1] = min(lower[row_i][1], row[1])
+                        upper[row_i][1] = max(upper[row_i][1], row[1])
+
+    for metric, results in metrics.items():
+        with open(os.path.join(output_dir, f"{metric}-lower.csv"), "w") as f:
+            f.write("skew,lower optimal\n")
+            for [skew, val] in results["lower"]:
+                f.write(f"{skew},{val}\n")
+                        
+        with open(os.path.join(output_dir, f"{metric}-upper.csv"), "w") as f:
+            f.write("skew,upper optimal\n")
+            for [skew, val] in results["upper"]:
+                f.write(f"{skew},{val}\n")
+                        
+def convert_pcap_task(pcap, converted_path):
+    #decompressed = pcap.removesuffix(".gz")
+    # subprocess.run(["gunzip", "-f", decompressed])
+    # print("unzipped")
+    args = ["bash", "-c", f"""tcpdump -q -n -t -r {pcap} | grep IP[^6] | sed 's/\\./ /g' | awk '{{print $2" "$3" "$4" "$5"-"$6"\\t"$8" "$9" "$10" "$11"-"$12""$13}}'"""]
+    print(" ".join(map(lambda arg: '"' + arg + '"', args)))
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    def decode_line(line: str):
+        def decode_address_port(address_port):
+            [address, port] = address_port.split("-")
+            port = int(port)
+            address = [int(part) for part in address.split(" ")]
+            return (address, port)
+
+        [addresses, protocol] = line.split(":")
+        protocol = "".join([c for c in protocol if c.isalpha()])
+        [source, destination] = map(lambda address: decode_address_port(address), addresses.split("\t"))
+
+        protocol_number = 0 if protocol == "udp" else 1
+
+        return (source, destination, protocol_number)
+
+    def encode_address_port(address):
+        (address, port) = address
+        parts = [part.to_bytes(1, "big") for part in address] + [port.to_bytes(2, "big")]
+        # print(parts)
+        # print(b"".join(parts))
+        #return bytearray([byte for bytes in parts for byte in bytes])
+        return b"".join(parts)
+
+    with open(converted_path, "wb") as binary_file:
+        while True:
+            line = process.stdout.readline().decode().lower()
+            if not line:
+                break
+            
+            if "udp" not in line and "tcp" not in line:
+                continue
+
+            #print(line)
+            (source, destination, protocol) = decode_line(line)
+            #print(f"source={source}, destination={destination}, protocol={protocol}")
+            binary_file.write(encode_address_port(source))
+            binary_file.write(encode_address_port(destination))
+            binary_file.write(protocol.to_bytes(1, "big"))
+            
+
+
+def convert_pcap_gz(pcap_folder, output_dir):
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+
+    converted_dir = os.path.join(output_dir, "converted")
+    os.makedirs(converted_dir)
+
+    tasks = []
+    for pcap in os.listdir(pcap_folder):
+        if not pcap.endswith(".pcap"):
+            continue
+        basename = pcap#.removesuffix(".gz")
+        pcap_path = os.path.join(pcap_folder, pcap)
+
+        tasks.append((convert_pcap_task, [pcap_path, os.path.join(converted_dir, basename)]))
+
+    run_tasks(tasks)
 
 
 if __name__ == "__main__":
@@ -344,6 +476,14 @@ if __name__ == "__main__":
         hash_functions = int(sys.argv[4])
         output = sys.argv[5]
         test_top_k(output, k, mem_pow, hash_functions)
+    elif experiment == "lower_upper_bounds":
+        output_dir = sys.argv[2]
+        files = sys.argv[3:]
+        lower_upper_bounds(output_dir, files)
+    elif experiment == "convert_pcap":
+        pcap_folder = sys.argv[2]
+        output_dir = sys.argv[3]
+        convert_pcap_gz(pcap_folder, output_dir)
     else:
         print(f"Unrecognised command {experiment}")
         sys.exit(1)

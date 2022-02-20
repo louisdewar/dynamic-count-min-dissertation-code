@@ -1,6 +1,11 @@
+#pragma once
+
 #include "Defs.hpp"
+#include <assert.h>
 #include <map>
+#include <stdint.h>
 #include <unordered_map>
+#include <vector>
 
 using namespace std;
 
@@ -16,8 +21,8 @@ public:
 
   vector<pair<K, V>> items() {
     vector<pair<K, V>> kv;
-    for (auto it = kvm.begin(); it != kvm.end(); ++it) {
-      kv.push_back(make_pair(it->first, it->second));
+    for (auto it = inverse_kvm.begin(); it != inverse_kvm.end(); ++it) {
+      kv.push_back(make_pair(it->first.second, it->first.first));
     }
     return kv;
   }
@@ -56,10 +61,6 @@ public:
       inverse_kvm[pair<V, K>(value, key)] = key;
       kvm[key] = value;
     }
-
-    // if (inverse_kvm.size() != kvm.size())
-    //{
-    //	system("pause");
-    // }
   }
 };
+
