@@ -2,6 +2,7 @@
 
 #include "BobHash.hpp"
 #include "Defs.hpp"
+#include "xxhash.h"
 #include <unordered_map>
 
 typedef unsigned int uint;
@@ -27,12 +28,14 @@ private:
 
 struct ArrayHasher {
   std::size_t operator()(const std::array<int, FT_SIZE> &a) const {
-    std::size_t h = 0;
+    XXH64_hash_t hash = XXH64(&a, FT_SIZE, 1010);
+    return hash;
+    // std::size_t h = 0;
 
-    for (auto e : a) {
-      h ^= std::hash<int>{}(e) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    }
-    return h;
+    // for (auto e : a) {
+    //   h ^= std::hash<int>{}(e) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    // }
+    // return h;
   }
 };
 

@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "CMS.hpp"
+#include "skew_estimation.hpp"
 
 using namespace std;
 
@@ -84,7 +85,7 @@ CountMinBaselineFlexibleWidth::~CountMinBaselineFlexibleWidth() {
   delete[] baseline_cms;
 }
 
-void CountMinBaselineFlexibleWidth::initialize(int width, int height,
+void CountMinBaselineFlexibleWidth::initialize(int width, int height,
                                                int seed) {
   this->width = width;
   this->height = height;
@@ -120,7 +121,9 @@ uint64_t CountMinBaselineFlexibleWidth::query(const char *str) {
   return min;
 }
 
-CountMinFlat::CountMinFlat() {}
+CountMinFlat::CountMinFlat(int k) {
+  this->topK = new orderedMapTopK<int, uint32_t>(k);
+}
 
 CountMinFlat::~CountMinFlat() {
   delete[] flat_cms;
@@ -130,6 +133,7 @@ CountMinFlat::~CountMinFlat() {
 void CountMinFlat::initialize(int width, int hash_count, int seed) {
   this->width = width;
   this->hash_count = hash_count;
+  this->counter = 0;
 
   width_mask = width - 1;
 
@@ -146,10 +150,17 @@ void CountMinFlat::initialize(int width, int hash_count, int seed) {
 }
 
 void CountMinFlat::increment(const char *str) {
+  uint32_t min = UINT32_MAX;
   for (int i = 0; i < hash_count; ++i) {
     uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
-    ++flat_cms[index];
+    uint32_t val = ++flat_cms[index];
+    if (val < min) {
+      min = val;
+    }
   }
+  this->counter++;
+  // for the synthetic data the first 4 bytes are enough to differentiate
+  this->topK->update(*(int *)str, min);
 }
 
 uint64_t CountMinFlat::query(const char *str) {
@@ -164,17 +175,10 @@ uint64_t CountMinFlat::query(const char *str) {
   return min;
 }
 
-void CountMinFlat::print_indexes(const char *str) {
-  printf("H = [");
-  for (int i = 0; i < hash_count; ++i) {
-    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
-    if (i == 0) {
-      printf("%i", index);
-    } else {
-      printf(", %i", index);
-    }
-  }
-  printf("]\n");
+double CountMinFlat::estimate_skew() {
+  auto items = this->topK->items();
+  return binary_search_estimate_skew(this->counter, items.size(), items.begin(),
+                                     items.end());
 }
 
 CountMinTopK::CountMinTopK(int k) {

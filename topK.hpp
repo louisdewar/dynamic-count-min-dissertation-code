@@ -32,19 +32,6 @@ public:
     bool key_in_map = (kvm.find(key) == kvm.end()) ? false : true;
 
     if (!key_in_map && kvm.size() == k) {
-      /*
-      V min_val = kvm.begin()->second;
-      K min_val_key = kvm.begin()->first;
-      for (auto it = kvm.begin(); it != kvm.end(); ++it)
-      {
-              if (it->second < min_val)
-              {
-                      min_val = it->second;
-                      min_val_key = it->first;
-              }
-      }
-      */
-
       V min_val = (inverse_kvm.begin()->first).first;
       K min_val_key = (inverse_kvm.begin()->first).second;
 

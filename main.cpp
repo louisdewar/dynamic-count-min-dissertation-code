@@ -113,6 +113,22 @@ int main(int argc, char **argv) {
 
     run_experiment_top_k(histogram, skew_cost, harmonic_estimate, trace, mem, k,
                          hashFunctions);
+  } else if (strcmp("test_flat_top_k", argv[1]) == 0) {
+    if (argc < 8) {
+      printf("Missing arguments to experiment\n");
+      return -1;
+    }
+
+    char *trace = argv[2];
+    char *skew_estimate_path = argv[3];
+    int k = stoi(argv[4]);
+    int mem = stoi(argv[5]);
+    int hashFunctions = stoi(argv[6]);
+    int estimateFrequency = stoi(argv[7]);
+
+    FILE *skew_estimate = fopen(skew_estimate_path, "w");
+    run_experiment_flat_top_k(skew_estimate, trace, mem, k, hashFunctions,
+                              estimateFrequency);
   } else {
     printf("Unrecognised command %s\n", argv[1]);
     return -1;

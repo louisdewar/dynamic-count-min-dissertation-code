@@ -1,6 +1,7 @@
 results
 traces
 equinix/
+univ_traces/
 traces_converted
 
 **/.ccls-cache

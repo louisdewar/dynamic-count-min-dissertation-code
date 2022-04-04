@@ -69,6 +69,7 @@ class CountMinFlat {
 
   int width;
   int hash_count;
+  int counter;
 
   int width_mask;
 
@@ -77,14 +78,17 @@ class CountMinFlat {
   uint32_t *flat_cms;
 
 public:
-  CountMinFlat();
+  // TODO: change key to std::array or maybe custom type without need for a map
+  orderedMapTopK<int, uint32_t> *topK;
+
+  CountMinFlat(int k);
   ~CountMinFlat();
 
   void initialize(int width, int hash_count, int seed);
   void increment(const char *str);
   uint64_t query(const char *str);
 
-  void print_indexes(const char *str);
+  double estimate_skew();
 };
 
 class CountMinTopK {
@@ -95,6 +99,7 @@ class CountMinTopK {
   BOBHash *bobhash;
 
 public:
+  // TODO: change to std::array or maybe custom type without need for a map
   orderedMapTopK<int, uint32_t> *topK;
   uint32_t **baseline_cms;
 

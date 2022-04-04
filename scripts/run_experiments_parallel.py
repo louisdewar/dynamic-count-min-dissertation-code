@@ -310,6 +310,48 @@ def test_top_k(output_dir, k, mem_pow, hash_functions):
         print(f"Generating skew cost graph {graph_output}")
         subprocess.run(["/bin/sh", "-c", f"graph '{file}' -o '{graph_output}' --title 'Skew cost analysis where true skew={skew}' --figsize '1600x1000'"])
 
+def top_flat_k_task(trace, skew_estimate_output, k, mem, hash_functions, estimate_frequency):
+    run_bin(["test_flat_top_k", trace, skew_estimate_output, k, mem, hash_functions, estimate_frequency])
+
+# Tests top k on all the traces
+def test_flat_top_k(output_dir, k, mem_pow, hash_functions, estimate_frequency):
+    output_dir = os.path.join("results", output_dir)
+
+    skew_estimate_original_dir = os.path.join(output_dir, "original_skew_estimate")
+
+
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    os.makedirs(skew_estimate_original_dir)
+
+    mem = 2 ** mem_pow
+
+    skew_traces = find_traces()
+
+    tasks = []
+    for skew, traces in skew_traces.items():
+        for trace in traces:
+            trace_output_file_name = f"top-{k}-hash-{hash_functions}-seed-{trace.seed}-skew-{skew}.csv"
+            skew_estimate_output = os.path.join(skew_estimate_original_dir, trace_output_file_name)
+
+            tasks.append((top_flat_k_task, [trace.path, skew_estimate_output, k, mem, hash_functions, estimate_frequency]))
+    
+    run_tasks(tasks)
+
+
+    # for key, file in histogram_results.items():
+    #     skew = key.split('-')[5]
+    #     graph_output = os.path.join(output_dir, key + ".png")
+    #     print(f"Generating histogram {graph_output}")
+    #     topk_histogram_graph(file, graph_output, f"Histogram of topK for skew f{skew}")
+
+    # for key, file in skew_cost_results.items():
+    #     skew = key.split('-')[5]
+    #     graph_output = os.path.join(output_dir, "topk-skew-cost-" + key + ".png")
+    #     print(f"Generating skew cost graph {graph_output}")
+    #     subprocess.run(["/bin/sh", "-c", f"graph '{file}' -o '{graph_output}' --title 'Skew cost analysis where true skew={skew}' --figsize '1600x1000'"])
 
 # This command is a bit unusual in that it acts over different groups of results already produced as opposed to creating new results
 # This finds lower and upper bounds for the optimal number of hash functions across different sets of results (different counter amounts)
@@ -408,11 +450,12 @@ def convert_pcap_task(pcap, converted_path):
 
 
 def convert_pcap_gz(pcap_folder, output_dir):
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
+    # if os.path.exists(output_dir):
+    #     shutil.rmtree(output_dir)
 
     converted_dir = os.path.join(output_dir, "converted")
-    os.makedirs(converted_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(converted_dir)
 
     tasks = []
     for pcap in os.listdir(pcap_folder):
@@ -484,6 +527,13 @@ if __name__ == "__main__":
         pcap_folder = sys.argv[2]
         output_dir = sys.argv[3]
         convert_pcap_gz(pcap_folder, output_dir)
+    elif experiment == "test_flat_top_k":
+        k = int(sys.argv[2])
+        mem_pow = int(sys.argv[3])
+        hash_functions = int(sys.argv[4])
+        estimate_frequency = int(sys.argv[5])
+        output_dir = sys.argv[6]
+        test_flat_top_k(output_dir, k, mem_pow, hash_functions, estimate_frequency)
     else:
         print(f"Unrecognised command {experiment}")
         sys.exit(1)
