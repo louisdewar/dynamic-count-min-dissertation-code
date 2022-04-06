@@ -48,13 +48,12 @@ public:
 /// A version of count min baseline where the width does not need to be a power
 /// of 2 (NOTE: this makes indexing less efficient)
 class CountMinBaselineFlexibleWidth {
-
   int width;
-  int height;
 
   BOBHash *bobhash;
 
 public:
+  int height;
   uint32_t **baseline_cms;
 
   CountMinBaselineFlexibleWidth();
@@ -68,7 +67,6 @@ public:
 class CountMinFlat {
 
   int width;
-  int hash_count;
   int counter;
 
   int width_mask;
@@ -78,6 +76,7 @@ class CountMinFlat {
   uint32_t *flat_cms;
 
 public:
+  int hash_count;
   // TODO: change key to std::array or maybe custom type without need for a map
   orderedMapTopK<int, uint32_t> *topK;
 

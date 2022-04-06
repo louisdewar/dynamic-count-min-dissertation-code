@@ -4,8 +4,9 @@
 #include <math.h>
 #include <stdio.h>
 
-const int SKEW_START = 6;
-// End is inclusive
+const int SKEW_START = 13;
+// const int SKEW_START = 6;
+//  End is inclusive
 const int SKEW_END = 13;
 const int SKEW_COUNT = SKEW_END - SKEW_START + 1;
 const long HARMONIC_TABLE_DOMAIN = 1 << 26;

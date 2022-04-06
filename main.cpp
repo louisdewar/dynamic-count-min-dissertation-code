@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "experiment.hpp"
+#include "final_experiments.hpp"
 
 int main(int argc, char **argv) {
   if (argc < 2) {
@@ -13,21 +14,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if (strcmp("test_baseline_cms_simple", argv[1]) == 0) {
-    if (test_baseline_cms_simple() != 0) {
-      printf("test baseline cms failed\n");
-      return -1;
-    }
-
-    printf("test successful\n");
-  } else if (strcmp("test_flat_cms_simple", argv[1]) == 0) {
-    if (test_flat_cms_simple() != 0) {
-      printf("test flat cms failed\n");
-      return -1;
-    }
-
-    printf("test successful\n");
-  } else if (strcmp("genzipf", argv[1]) == 0) {
+  if (strcmp("genzipf", argv[1]) == 0) {
     if (argc < 6) {
       printf("Missing arguments for genzipf [output_path] [number of packets] "
              "[skew] [seed]\n");
@@ -129,6 +116,23 @@ int main(int argc, char **argv) {
     FILE *skew_estimate = fopen(skew_estimate_path, "w");
     run_experiment_flat_top_k(skew_estimate, trace, mem, k, hashFunctions,
                               estimateFrequency);
+  } else if (strcmp("final_baseline_performance_fixed_mem_synthetic",
+                    argv[1]) == 0) {
+    if (argc < 6) {
+      printf("Missing arguments to experiment\n");
+      return -1;
+    }
+
+    char *trace = argv[2];
+    char *flat_output = argv[3];
+    char *traditional_output = argv[4];
+    int mem = stoi(argv[5]);
+
+    FILE *flat_results = fopen(flat_output, "w");
+    FILE *traditional_results = fopen(traditional_output, "w");
+
+    baseline_performance_fixed_mem_synthetic(mem, trace, flat_results,
+                                             traditional_results);
   } else {
     printf("Unrecognised command %s\n", argv[1]);
     return -1;

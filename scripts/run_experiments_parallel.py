@@ -20,8 +20,6 @@ def run_tasks(tasks):
     for _ in tqdm.tqdm(pool.imap_unordered(run_task, tasks), total=len(tasks)):
         pass
 
-    # results = [pool.apply(f, args, kwargs) for (f, args, kwargs) in tasks]
-
     pool.close()
 
 def run_bin(args):
