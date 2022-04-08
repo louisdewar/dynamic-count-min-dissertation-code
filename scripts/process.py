@@ -17,7 +17,8 @@ def transform_results(results, resultsKeysOrdered, results_key_header, output_ba
     # NOTE: trace is probably used incorrectly here (it should probably be results but I need a unique name)
     with open(results[next(iter(results.keys()))], "r") as trace:
         lines = trace.read().splitlines()
-        headers = [header.replace(" ", "-") for header in lines[0].split(',')]
+        original_headers = lines[0].split(',')
+        headers = [header.replace(" ", "-") for header in original_headers]
         x_header = headers[0]
         headers = headers[1:]
 
@@ -28,7 +29,7 @@ def transform_results(results, resultsKeysOrdered, results_key_header, output_ba
         for line in lines[1:]:
             x_values.append(line.split(',')[0])
 
-        for column in headers:
+        for column, original_name in zip(headers, original_headers[1:]):
             column_path = os.path.join(output_base, column)
 
             if os.path.exists(column_path):
@@ -36,6 +37,7 @@ def transform_results(results, resultsKeysOrdered, results_key_header, output_ba
             os.makedirs(column_path)
 
             columns[column] = {
+                "original_name": original_name,
                 "path": column_path,
                 "files": { x_value: open(os.path.join(column_path, f"trace-{x_value}-{x_header}.csv"), "w") for x_value in x_values }
             }
@@ -95,6 +97,7 @@ def lowest_error(labelled_files: dict[str, str], x_column: str, new_column_name:
 
             # For the first CSV
             if ordered_rows is None:
+                lowest 
                 ordered_rows = []
                 for row in rows:
                     values = row.split(",")
@@ -119,6 +122,66 @@ def lowest_error(labelled_files: dict[str, str], x_column: str, new_column_name:
 
         output_file.write(f"{x_value},{label},{y_value}\n")
 
+# labelled_files: [skew, [file]]
+def error_bounds(labelled_files: dict[str, list[str]], results_keys_ordered, x_column: str, y_column: str, output_path: str):
+
+    # The lowest value of x which was at some point an optimal value
+    lowest_best_map = {}
+    # The highest value of x which was at some point an optimal value
+    highest_best_map = {}
+    for skew, files in labelled_files.items():
+        lowest_best = None
+        highest_best = None
+
+        for file in files:
+            best = None
+            # Find best in single file
+            with open(file, "r") as csv:
+                rows = csv.read().splitlines()
+                headers = rows[0].split(",")
+                rows = rows[1:]
+
+                if not y_column in headers:
+                    raise Exception(f"{y_column} (y) was not a header of {file}")
+                if not x_column in headers:
+                    raise Exception(f"{x_column} (x) was not a header of {file}")
+
+                x_column_index = headers.index(x_column)
+                y_column_index = headers.index(y_column)
+
+
+                for row in rows:
+                    values = row.split(",")
+                    x_value = values[x_column_index]
+                    y_value = float(values[y_column_index])
+
+                    if best is None:
+                        best = (x_value, y_value)
+
+                    if best[1] > y_value:
+                        best = (x_value, y_value)
+
+            assert best != None
+            if lowest_best is None or highest_best is None:
+                lowest_best = best
+                highest_best = best
+
+            if lowest_best[0] > best[0]:
+                lowest_best = best
+            if highest_best[0] < best[0]:
+                highest_best = best
+
+        lowest_best_map[skew] = lowest_best
+        highest_best_map[skew] = highest_best
+
+    
+
+    with open(output_path, "w") as output_file:
+        output_file.write(f"skew,lower,upper\n")
+        for skew in results_keys_ordered:
+            lower = lowest_best_map[skew]
+            upper = highest_best_map[skew]
+            output_file.write(f"{skew},{lower[0]},{upper[0]}\n")
 
 # Requires: `pip install graph-cli`
 # There appears to be a bug with this tool such that the labels for the x-y axis are swapped

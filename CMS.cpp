@@ -181,6 +181,21 @@ double CountMinFlat::estimate_skew() {
                                      items.end());
 }
 
+double CountMinFlat::sketch_error(double alpha, long total, int mem) {
+
+  int threshold = (int)(alpha * (double)total / (double)mem);
+  int above_threshold = 0;
+
+  for (int counter = 0; counter < width; counter++) {
+    if (this->flat_cms[counter] > threshold) {
+      above_threshold++;
+    }
+  }
+
+  double failure_prob = (double)above_threshold / (double)width;
+  return failure_prob;
+}
+
 CountMinTopK::CountMinTopK(int k) {
   this->topK = new orderedMapTopK<int, uint32_t>(k);
 }
@@ -220,6 +235,7 @@ void CountMinTopK::increment(const char *str) {
     }
   }
 
+  this->counter++;
   // for the synthetic data the first 4 bytes are enough to differentiate
   this->topK->update(*(int *)str, min);
 }
@@ -237,6 +253,31 @@ uint64_t CountMinTopK::query(const char *str) {
   return min;
 }
 
+double CountMinTopK::sketch_error(double alpha, long total, int mem) {
+  long double failure_prob = 1.0;
+
+  int threshold = (int)(alpha * (double)total / (double)mem);
+
+  for (int row = 0; row < this->height; row++) {
+    int aboveThreshold = 0;
+
+    for (int counter = 0; counter < width; counter++) {
+      if (this->baseline_cms[row][counter] > threshold) {
+        aboveThreshold++;
+      }
+    }
+
+    double row_prob = (double)aboveThreshold / (double)width;
+    failure_prob *= (long double)row_prob;
+  }
+  return failure_prob;
+}
+
+double CountMinTopK::estimate_skew() {
+  auto items = this->topK->items();
+  return binary_search_estimate_skew(this->counter, items.size(), items.begin(),
+                                     items.end());
+}
 void CountMinTopK::print_indexes(const char *str) {
   printf("H = [");
   for (int i = 0; i < height; ++i) {

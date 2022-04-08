@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
                               estimateFrequency);
   } else if (strcmp("final_baseline_performance_fixed_mem_synthetic",
                     argv[1]) == 0) {
-    if (argc < 6) {
+    if (argc < 7) {
       printf("Missing arguments to experiment\n");
       return -1;
     }
@@ -126,13 +126,15 @@ int main(int argc, char **argv) {
     char *trace = argv[2];
     char *flat_output = argv[3];
     char *traditional_output = argv[4];
-    int mem = stoi(argv[5]);
+    char *skew_estimation_output = argv[5];
+    int mem = stoi(argv[6]);
 
     FILE *flat_results = fopen(flat_output, "w");
     FILE *traditional_results = fopen(traditional_output, "w");
+    FILE *skew_estimation = fopen(skew_estimation_output, "w");
 
-    baseline_performance_fixed_mem_synthetic(mem, trace, flat_results,
-                                             traditional_results);
+    baseline_performance_fixed_mem_synthetic(
+        mem, trace, flat_results, traditional_results, skew_estimation);
   } else {
     printf("Unrecognised command %s\n", argv[1]);
     return -1;

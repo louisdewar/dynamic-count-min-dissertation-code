@@ -51,24 +51,64 @@ def find_traces() -> dict[str, list[Trace]]:
     
     return traces
 
-
+def ensure_dir_exists(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 
 # # Calculates average performance of flat count min and regular count min (with a range of parameters) with different skews at a fixed memory.
 # # The final results are written to "{output_dir}/final"
 # def baseline_performance_fixed_mem_generator(traces_dir, output_dir, mem_pow):
 
-def output_averaged_results(averaged_dir, transformed_dir):
+# def find_lower_upper_bounds(output_dir_map, transformed_dirs):
+#     metrics = {}
+# 
+#     for transformed_dir in transformed_dirs:
+#         for metric in os.listdir(transformed_dir):
+#             #if not metric in metrics:
+#             #    metrics[metric] = { "lower": None, "upper": None }
+#             with open(os.path.join(transformed_dir, metric, "lowest_error.csv"), "r") as f:
+#                 rows = map(lambda line: line.split(","), f.readlines()[1:])
+#                 rows = [[row[0], int(row[1])] for row in rows]
+# 
+#                 if not metric in metrics:
+#                     metrics[metric] = { "lower": rows, "upper": [row.copy() for row in rows] }
+#                 else:
+#                     lower = metrics[metric]["lower"]
+#                     upper = metrics[metric]["upper"]
+# 
+#                     for row_i, row in enumerate(rows):
+#                         lower[row_i][1] = min(lower[row_i][1], row[1])
+#                         upper[row_i][1] = max(upper[row_i][1], row[1])
+# 
+#     for metric, results in metrics.items():
+#         output_dir = output_dir_map[metric]
+#         with open(os.path.join(output_dir, f"{metric}-lower.csv"), "w") as f:
+#             f.write("skew,lower optimal\n")
+#             for [skew, val] in results["lower"]:
+#                 f.write(f"{skew},{val}\n")
+#                         
+#         with open(os.path.join(output_dir, f"{metric}-upper.csv"), "w") as f:
+#             f.write("skew,upper optimal\n")
+#             for [skew, val] in results["upper"]:
+#                 f.write(f"{skew},{val}\n")
+
+def output_transformed_results(averaged_dir, transformed_dir, average_groups):
+    raw_results = { os.path.basename(key).split("-")[1]: value  for key, value in average_groups.items() }
+
     results = { os.path.basename(file).split("-")[1]: os.path.join(averaged_dir, file) for file in os.listdir(averaged_dir) }
 
-    resultsKeysOrdered = list(results.keys())
-    resultsKeysOrdered.sort(key=lambda key: float(key))
+    results_keys_ordered = list(results.keys())
+    results_keys_ordered.sort(key=lambda key: float(key))
 
-    columns = util.transform_results(results, resultsKeysOrdered, "skew", transformed_dir)
+    columns = util.transform_results(results, results_keys_ordered, "skew", transformed_dir)
 
     for column_name, column in columns.items():
         column_path = column["path"]
         files = column["files"]
+        error_bounds_file = os.path.join(column_path, "error_bounds.csv")
+        util.error_bounds(raw_results, results_keys_ordered, "hash functions", column["original_name"], error_bounds_file)
+
         lowest_error_file = os.path.join(column_path, "lowest_error.csv")
         util.lowest_error(files, "skew", "hash functions", column_name, lowest_error_file)
 
@@ -80,8 +120,8 @@ def output_averaged_results(averaged_dir, transformed_dir):
         util.generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, plot_output)
         print(f'Generated graph at {plot_output}')
 
-def baseline_performance_fixed_mem_synthetic_task(trace, flat_results, traditional_results, mem):
-    run_bin(["final_baseline_performance_fixed_mem_synthetic", trace, flat_results, traditional_results, mem])
+def baseline_performance_fixed_mem_synthetic_task(trace, flat_results, traditional_results, skew_estimation_results, mem):
+    run_bin(["final_baseline_performance_fixed_mem_synthetic", trace, flat_results, traditional_results, skew_estimation_results, mem])
 
 def baseline_performance_fixed_mem_synthetic(output_dir):
     # TODO: output latex code for figures
@@ -91,19 +131,23 @@ def baseline_performance_fixed_mem_synthetic(output_dir):
     traditional_averaged_dir = os.path.join(averaged_dir, "traditional")
     transformed_dir = os.path.join(output_dir, "transformed")
 
+    should_run_tasks = True
     if os.path.exists(output_dir):
-        raise Exception("Output dir already exists")
+        should_run_tasks = False
+        print("Not running experiments because output dir already exists")
+        # raise Exception("Output dir already exists")
         # shutil.rmtree(output_dir)
-    os.makedirs(os.path.join(output_dir, "original", "flat"))
-    os.makedirs(os.path.join(output_dir, "original", "traditional"))
-    os.makedirs(os.path.join(output_dir, "transformed", "flat"))
-    os.makedirs(os.path.join(output_dir, "transformed", "traditional"))
-    os.makedirs(averaged_dir)
-    os.makedirs(flat_averaged_dir)
-    os.makedirs(traditional_averaged_dir)
+    ensure_dir_exists(os.path.join(output_dir, "original", "flat"))
+    ensure_dir_exists(os.path.join(output_dir, "original", "traditional"))
+    ensure_dir_exists(os.path.join(output_dir, "original", "skew_estimates"))
+    ensure_dir_exists(os.path.join(output_dir, "transformed", "flat"))
+    ensure_dir_exists(os.path.join(output_dir, "transformed", "traditional"))
+    ensure_dir_exists(averaged_dir)
+    ensure_dir_exists(flat_averaged_dir)
+    ensure_dir_exists(traditional_averaged_dir)
 
     mem_pows = [16, 18, 20]
-    mems = [2 ** mem_pow for mem_pow in mem_pows]
+    #mem_pows = [12]
 
     skew_traces = find_traces()
 
@@ -111,67 +155,52 @@ def baseline_performance_fixed_mem_synthetic(output_dir):
     flat_average_groups = {}
     traditional_average_groups = {}
     by_mem_size = {}
-    for mem in mems:
-        by_mem_size[mem] = { "flat": {}, "traditional": {} }
+    for mem_pow in mem_pows:
+        by_mem_size[mem_pow] = { "flat": {}, "traditional": {} }
 
     for skew, traces in skew_traces.items():
         group_key = f"skew-{skew}-fixed_mem.csv"
         flat_average_groups[group_key] = []
         traditional_average_groups[group_key] = []
 
-        for mem in mems:
-            by_mem_size[mem]["flat"][group_key] = []
-            by_mem_size[mem]["traditional"][group_key] = []
+        for mem_pow in mem_pows:
+            mem = 2**mem_pow
+            by_mem_size[mem_pow]["flat"][group_key] = []
+            by_mem_size[mem_pow]["traditional"][group_key] = []
 
             for trace in traces:
                 base_name = f"seed-{trace.seed}-skew-{skew}-mem-{mem}.csv"
                 flat_results = os.path.join(output_dir, "original", "flat", base_name)
                 traditional_results = os.path.join(output_dir, "original", "traditional", base_name)
-                tasks.append((baseline_performance_fixed_mem_synthetic_task, [trace.path, flat_results, traditional_results, mem]))
+                skew_estimation_results = os.path.join(output_dir, "original", "skew_estimates", base_name)
+                tasks.append((baseline_performance_fixed_mem_synthetic_task, [trace.path, flat_results, traditional_results, skew_estimation_results, mem]))
                 flat_average_groups[group_key].append(flat_results)
                 traditional_average_groups[group_key].append(traditional_results)
+                by_mem_size[mem_pow]["flat"][group_key].append(flat_results)
+                by_mem_size[mem_pow]["traditional"][group_key].append(traditional_results)
 
-    run_tasks(tasks)
+    if should_run_tasks:
+        run_tasks(tasks)
 
     avr_columns = ["normalized error", "heavy hitter error"]
     util.average_results(traditional_averaged_dir, traditional_average_groups, avr_columns)
     util.average_results(flat_averaged_dir, flat_average_groups, avr_columns)
     # util.average_results(averaged_dir, average_groups, ["normalized error", "heavy hitter error", "sketch error"])
 
+    variant_avr_groups = {"flat": flat_average_groups, "traditional": traditional_average_groups}
+
     for variant in ["flat", "traditional"]:
-        output_averaged_results(os.path.join(averaged_dir, variant), os.path.join(output_dir, "transformed", variant))
-        # results = { os.path.basename(file).split("-")[1]: os.path.join(averaged_dir, variant, file) for file in os.listdir(os.path.join(averaged_dir, variant)) }
-
-        # resultsKeysOrdered = list(results.keys())
-        # resultsKeysOrdered.sort(key=lambda key: float(key))
-
-        # columns = util.transform_results(results, resultsKeysOrdered, "skew", os.path.join(output_dir, "transformed", variant))
-
-        # for column_name, column in columns.items():
-        #     column_path = column["path"]
-        #     files = column["files"]
-        #     lowest_error_file = os.path.join(column_path, "lowest_error.csv")
-        #     util.lowest_error(files, "skew", "hash functions", column_name, lowest_error_file)
-
-        #     plot_output = os.path.join(column_path, "lowest_error.png")
-        #     subprocess.run(["/bin/sh", "-c", f"graph {lowest_error_file} -o {plot_output} -x skew -y 'hash functions'"])
-        #     print(f'Generated graph at {plot_output}')
-
-        #     plot_output = os.path.join(column_path, "graph.png")
-        #     util.generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, plot_output)
-        #     print(f'Generated graph at {plot_output}')
+        output_transformed_results(os.path.join(averaged_dir, variant), os.path.join(output_dir, "transformed", variant), variant_avr_groups[variant])
 
     for mem, average_groups in by_mem_size.items():
         for variant in ["flat", "traditional"]:
-            mem_average_dir = os.path.join(averaged_dir, f"mempow-{mem}-{variant}")
-            mem_transformed_dir = os.path.join(transformed_dir, f"mempow-{mem}-{variant}")
-            if not os.path.exists(mem_average_dir):
-                os.makedirs(mem_average_dir)
-            if not os.path.exists(mem_transformed_dir):
-                os.makedirs(mem_transformed_dir)
+            mem_average_dir = os.path.join(averaged_dir, f"mem-{mem}-{variant}")
+            mem_transformed_dir = os.path.join(transformed_dir, f"mem-{mem}-{variant}")
+            ensure_dir_exists(mem_average_dir)
+            ensure_dir_exists(mem_transformed_dir)
 
             util.average_results(mem_average_dir, average_groups[variant], avr_columns)
-            output_averaged_results(mem_average_dir, mem_transformed_dir)
+            output_transformed_results(mem_average_dir, mem_transformed_dir, average_groups[variant])
 
 
 if __name__ == "__main__":

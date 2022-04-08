@@ -88,16 +88,18 @@ public:
   uint64_t query(const char *str);
 
   double estimate_skew();
+  double sketch_error(double alpha, long total, int mem);
 };
 
 class CountMinTopK {
 
   int width;
-  int height;
 
   BOBHash *bobhash;
+  int counter;
 
 public:
+  int height;
   // TODO: change to std::array or maybe custom type without need for a map
   orderedMapTopK<int, uint32_t> *topK;
   uint32_t **baseline_cms;
@@ -111,6 +113,8 @@ public:
   uint64_t query(const char *str);
 
   void print_indexes(const char *str);
+  double estimate_skew();
+  double sketch_error(double alpha, long total, int mem);
 };
 
-#endif // !COUNT_MIN_SKETCH
+#endif
