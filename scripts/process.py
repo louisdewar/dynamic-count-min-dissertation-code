@@ -188,10 +188,10 @@ def error_bounds(labelled_files: dict[str, list[str]], results_keys_ordered, x_c
 def generate_graph(files, output):
     commandparts = []
     for label, file in files.items():
-        commandparts.append(f"graph {file} --marker='' --legend='{label}'")
+        commandparts.append(f"graph '{file}' --marker='' --legend='{label}'")
 
     command = " --chain | ".join(commandparts)
-    command += f" -o {output}"
+    command += f" -o '{output}'"
 
     subprocess.run(["/usr/bin/sh", "-c", command])
     

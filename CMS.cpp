@@ -1,3 +1,6 @@
+// Code adapted from SALSA:
+// https://github.com/SALSA-ICDE2021/SALSA/tree/main/Salsa
+
 #include <assert.h>
 #include <chrono>
 #include <fstream>
@@ -121,9 +124,7 @@ uint64_t CountMinBaselineFlexibleWidth::query(const char *str) {
   return min;
 }
 
-CountMinFlat::CountMinFlat(int k) {
-  this->topK = new orderedMapTopK<int, uint32_t>(k);
-}
+CountMinFlat::CountMinFlat(int k) { this->topK = new TopK(k); }
 
 CountMinFlat::~CountMinFlat() {
   delete[] flat_cms;
@@ -159,8 +160,7 @@ void CountMinFlat::increment(const char *str) {
     }
   }
   this->counter++;
-  // for the synthetic data the first 4 bytes are enough to differentiate
-  this->topK->update(*(int *)str, min);
+  this->topK->update(str, min);
 }
 
 uint64_t CountMinFlat::query(const char *str) {
@@ -177,8 +177,8 @@ uint64_t CountMinFlat::query(const char *str) {
 
 double CountMinFlat::estimate_skew() {
   auto items = this->topK->items();
-  return binary_search_estimate_skew(this->counter, items.size(), items.begin(),
-                                     items.end());
+  return small_set_estimate_skew(this->counter, items.size(), items.begin(),
+                                 items.end());
 }
 
 double CountMinFlat::sketch_error(double alpha, long total, int mem) {
@@ -196,9 +196,9 @@ double CountMinFlat::sketch_error(double alpha, long total, int mem) {
   return failure_prob;
 }
 
-CountMinTopK::CountMinTopK(int k) {
-  this->topK = new orderedMapTopK<int, uint32_t>(k);
-}
+int CountMinFlat::get_hash_function_count() { return this->hash_count; }
+
+CountMinTopK::CountMinTopK(int k) { this->topK = new TopK(k); }
 
 CountMinTopK::~CountMinTopK() {
   for (int i = 0; i < height; ++i) {
@@ -236,8 +236,7 @@ void CountMinTopK::increment(const char *str) {
   }
 
   this->counter++;
-  // for the synthetic data the first 4 bytes are enough to differentiate
-  this->topK->update(*(int *)str, min);
+  this->topK->update(str, min);
 }
 
 uint64_t CountMinTopK::query(const char *str) {
@@ -275,8 +274,8 @@ double CountMinTopK::sketch_error(double alpha, long total, int mem) {
 
 double CountMinTopK::estimate_skew() {
   auto items = this->topK->items();
-  return binary_search_estimate_skew(this->counter, items.size(), items.begin(),
-                                     items.end());
+  return small_set_estimate_skew(this->counter, items.size(), items.begin(),
+                                 items.end());
 }
 void CountMinTopK::print_indexes(const char *str) {
   printf("H = [");
@@ -290,3 +289,109 @@ void CountMinTopK::print_indexes(const char *str) {
   }
   printf("]\n");
 }
+
+int CountMinTopK::get_hash_function_count() { return this->height; }
+
+DynamicCountMin::DynamicCountMin(int k, ErrorMetric metric) {
+  this->topK = new TopK(k);
+  this->optimisation_target = metric;
+}
+
+DynamicCountMin::~DynamicCountMin() {
+  delete[] flat_cms;
+  delete[] bobhash;
+}
+
+void DynamicCountMin::initialize(int width, int start_hash_count, int seed) {
+  this->width = width;
+  this->hash_count = start_hash_count;
+  this->counter = 0;
+
+  width_mask = width - 1;
+
+  assert(width > 0 && "We assume too much!");
+  assert(width % 4 == 0 && "We assume that (w % 4 == 0)!");
+  assert((width & (width - 1)) == 0 && "We assume that width is a power of 2!");
+
+  flat_cms = new uint32_t[width];
+  bobhash = new BOBHash[start_hash_count];
+
+  for (int i = 0; i < start_hash_count; ++i) {
+    bobhash[i].initialize((seed * (3 + i) + i + 100) % 1229);
+  }
+}
+
+void DynamicCountMin::increment(const char *str) {
+  const int threshold = 1 << 17;
+  uint32_t min = UINT32_MAX;
+  for (int i = 0; i < hash_count; ++i) {
+    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
+    uint32_t val = ++flat_cms[index];
+    if (val < min) {
+      min = val;
+    }
+  }
+  this->counter++;
+
+  if (this->counter == threshold) {
+    this->dynamic_reconfigure();
+  }
+
+  this->topK->update(str, min);
+}
+
+void DynamicCountMin::dynamic_reconfigure() {
+  double skew = this->estimate_skew();
+
+  int lower = 0;
+  int upper = 0;
+  optimal_bounds(skew, &upper, &lower, this->optimisation_target);
+  // Currently we don't use upper but it might have a use if we want to
+  // repeatedly dynamically configure as we can avoid going to too few hash
+  // functions too quickly
+  (void)upper;
+
+  if (lower < this->hash_count) {
+    printf("Dyanmic reconfigure from %d to %d (skew=%f)\n", this->hash_count,
+           lower, skew);
+    this->hash_count = lower;
+  } else {
+    printf("Unable to dyanmic reconfigure from %d to %d (skew=%f)\n",
+           this->hash_count, lower, skew);
+  }
+}
+
+uint64_t DynamicCountMin::query(const char *str) {
+  uint64_t min = UINT64_MAX;
+  for (int i = 0; i < hash_count; ++i) {
+    uint index = (bobhash[i].run(str, FT_SIZE)) & width_mask;
+    uint64_t temp = flat_cms[index];
+    if (min > temp) {
+      min = temp;
+    }
+  }
+  return min;
+}
+
+double DynamicCountMin::estimate_skew() {
+  auto items = this->topK->items();
+  return small_set_estimate_skew(this->counter, items.size(), items.begin(),
+                                 items.end());
+}
+
+double DynamicCountMin::sketch_error(double alpha, long total, int mem) {
+
+  int threshold = (int)(alpha * (double)total / (double)mem);
+  int above_threshold = 0;
+
+  for (int counter = 0; counter < width; counter++) {
+    if (this->flat_cms[counter] > threshold) {
+      above_threshold++;
+    }
+  }
+
+  double failure_prob = (double)above_threshold / (double)width;
+  return failure_prob;
+}
+
+int DynamicCountMin::get_hash_function_count() { return this->hash_count; }

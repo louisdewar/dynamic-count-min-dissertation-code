@@ -1,8 +1,8 @@
 #pragma once
 
+#include "ArrayHasher.hpp"
 #include "BobHash.hpp"
 #include "Defs.hpp"
-#include "xxhash.h"
 #include <unordered_map>
 
 typedef unsigned int uint;
@@ -26,18 +26,12 @@ private:
   int *buf;
 };
 
-struct ArrayHasher {
-  std::size_t operator()(const std::array<int, FT_SIZE> &a) const {
-    XXH64_hash_t hash = XXH64(&a, FT_SIZE, 1010);
-    return hash;
-    // std::size_t h = 0;
-
-    // for (auto e : a) {
-    //   h ^= std::hash<int>{}(e) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    // }
-    // return h;
-  }
-};
+// struct ArrayHasher {
+//   std::size_t operator()(const std::array<char, FT_SIZE> &a) const {
+//     XXH64_hash_t hash = XXH64(&a, FT_SIZE, 1010);
+//     return hash;
+//   }
+// };
 
 class HashPacketCounter {
 public:
@@ -52,6 +46,5 @@ public:
   void reset();
 
 private:
-  std::unordered_map<std::array<int, FT_SIZE>, int, ArrayHasher> map;
+  std::unordered_map<std::array<char, FT_SIZE>, int, ArrayHasher> map;
 };
-

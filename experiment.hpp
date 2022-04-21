@@ -24,7 +24,7 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
   alpha *= exp(1.0);
 
   HashPacketCounter counter = HashPacketCounter(1 << 27);
-  auto true_top_k = orderedMapTopK<int, uint32_t>(1000);
+  auto true_top_k = TopK(1000);
 
   ZipfReader *reader = new ZipfReader(zipfPath);
   CountMinBaselineFlexibleWidth sketch = CountMinBaselineFlexibleWidth();
@@ -51,7 +51,7 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
     sketch.increment(dest);
     int actual = counter.increment(dest);
     int countMin = sketch.query(dest);
-    true_top_k.update(*(int *)&dest, actual);
+    true_top_k.update(dest, actual);
 
     if (countMin < actual) {
       throw std::runtime_error(
@@ -201,10 +201,7 @@ void run_experiment_top_k(FILE *frequency_f, FILE *cost_f,
     }
   }
 
-  std::vector<std::pair<int, uint32_t>> topK = {};
-
-  // Overwrite with estimates
-  topK = sketch->topK->items();
+  auto topK = sketch->topK->items();
 
   double estimated_skew =
       binary_search_estimate_skew(total, k, topK.begin(), topK.end());

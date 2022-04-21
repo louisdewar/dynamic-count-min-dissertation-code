@@ -1,3 +1,6 @@
+// Code adapted from SALSA:
+// https://github.com/SALSA-ICDE2021/SALSA/tree/main/Salsa
+
 #pragma once
 
 #include "BobHash.hpp"

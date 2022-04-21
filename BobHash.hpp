@@ -1,3 +1,6 @@
+// Code adapted from SALSA:
+// https://github.com/SALSA-ICDE2021/SALSA/tree/main/Salsa
+
 // Adapted from:
 // https://github.com/Gavindeed/HeavyGuardian/tree/master/flow_size
 

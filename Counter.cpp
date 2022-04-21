@@ -51,7 +51,7 @@ HashPacketCounter::~HashPacketCounter() {
 }
 
 int HashPacketCounter::increment(char *str) {
-  std::array<int, FT_SIZE> flow_id;
+  std::array<char, FT_SIZE> flow_id;
   memcpy(&flow_id, str, FT_SIZE);
 
   auto val = this->map.find(flow_id);
@@ -67,7 +67,7 @@ int HashPacketCounter::increment(char *str) {
 }
 
 int HashPacketCounter::query(char *str) {
-  std::array<int, FT_SIZE> flow_id;
+  std::array<char, FT_SIZE> flow_id;
   memcpy(&flow_id, str, FT_SIZE);
 
   auto val = this->map.find(flow_id);
