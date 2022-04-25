@@ -106,13 +106,6 @@ def output_transformed_results_dynamic(averaged_dir, transformed_dir, average_gr
         lowest_error_file = os.path.join(column_path, "lowest_error.csv")
         util.lowest_error(files, "skew", "variant", column_name, lowest_error_file)
 
-        # plot_output = os.path.join(column_path, "lowest_error.png")
-        # subprocess.run(["/bin/sh", "-c", f"graph '{lowest_error_file}' -o '{plot_output}' -x skew -y 'hash functions'"])
-        # print(f'Generated graph at {plot_output}')
-
-        # plot_output = os.path.join(column_path, "graph.png")
-        # util.generate_graph({ f"n={hash_count}": file for hash_count, file in files.items() }, plot_output)
-        # print(f'Generated graph at {plot_output}')
 def baseline_performance_fixed_mem_synthetic_task(trace, flat_results, traditional_results, skew_estimation_results, mem):
     run_bin(["final_baseline_performance_fixed_mem_synthetic", trace, flat_results, traditional_results, skew_estimation_results, mem])
 
@@ -175,7 +168,6 @@ def baseline_performance_fixed_mem_synthetic(output_dir):
     avr_columns = ["normalized error", "heavy hitter error", "sketch error e", "sketch error 2e", "sketch error 4e", "sketch error 8e"]
     util.average_results(traditional_averaged_dir, traditional_average_groups, avr_columns)
     util.average_results(flat_averaged_dir, flat_average_groups, avr_columns)
-    # util.average_results(averaged_dir, average_groups, ["normalized error", "heavy hitter error", "sketch error"])
 
     variant_avr_groups = {"flat": flat_average_groups, "traditional": traditional_average_groups}
 
@@ -197,6 +189,7 @@ def baseline_performance_fixed_mem_real_world_task(trace, flat_results, traditio
 
 def baseline_performance_fixed_mem_real_world(output_dir):
     output_dir = os.path.join("results", output_dir)
+    transformed_dir = os.path.join(output_dir, "transformed")
 
     should_run_tasks = True
     if os.path.exists(output_dir):
@@ -205,23 +198,72 @@ def baseline_performance_fixed_mem_real_world(output_dir):
     ensure_dir_exists(os.path.join(output_dir, "original", "flat"))
     ensure_dir_exists(os.path.join(output_dir, "original", "traditional"))
     ensure_dir_exists(os.path.join(output_dir, "original", "skew_estimates"))
+    ensure_dir_exists(transformed_dir)
 
     skew_traces = find_real_world_final_traces()
 
-    mem_pows = [16, 18, 20]
+    mem_pows = [10, 12, 14, 16, 18]
 
     tasks = []
-    for trace in skew_traces:
-        for mem_pow in mem_pows:
-            mem = 2**mem_pow
+    by_mem = {}
+    for mem_pow in mem_pows:
+        by_mem[mem_pow] = {"flat": [], "traditional": []}
+        mem = 2**mem_pow
+        for trace in skew_traces:
             tracename = f"{os.path.basename(trace).removesuffix('.pcap')}-pow-{mem_pow}.csv"
             flat_results = os.path.join(output_dir, "original", "flat", tracename)
             traditional_results = os.path.join(output_dir, "original", "traditional", tracename)
             skew_estimation_results = os.path.join(output_dir, "original", "skew_estimates", tracename)
+            by_mem[mem_pow]["flat"].append(flat_results)
+            by_mem[mem_pow]["traditional"].append(traditional_results)
             tasks.append((baseline_performance_fixed_mem_real_world_task, [trace, flat_results, traditional_results, skew_estimation_results, mem]))
 
     if should_run_tasks:
         run_tasks(tasks)
+
+    for mem_pow, variants in by_mem.items():
+        for variant in ["flat", "traditional"]:
+            results = { os.path.basename(trace).split('-')[0]: trace for trace in variants[variant] }
+            util.transform_results(results, ["equinix", "univ1", "univ2"], "trace", os.path.join(transformed_dir, f"mem-{mem_pow}-{variant}"))
+
+def dynamic_performance_fixed_mem_real_world_task(trace, variant_results, skew_estimation_results, mem):
+    run_bin(["final_dynamic_performance_fixed_mem_real_world", trace, variant_results, skew_estimation_results, mem])
+
+def dynamic_performance_fixed_mem_real_world(output_dir):
+    output_dir = os.path.join("results", output_dir)
+    transformed_dir = os.path.join(output_dir, "transformed")
+
+    should_run_tasks = True
+    if os.path.exists(output_dir):
+        should_run_tasks = False
+        print("Not running experiments because output dir already exists")
+    ensure_dir_exists(os.path.join(output_dir, "original", "dynamic"))
+    ensure_dir_exists(os.path.join(output_dir, "original", "skew_estimates"))
+    ensure_dir_exists(transformed_dir)
+
+    skew_traces = find_real_world_final_traces()
+
+    mem_pows = [10, 12, 14, 16, 18]
+
+    tasks = []
+    by_mem = {}
+    for mem_pow in mem_pows:
+        by_mem[mem_pow] = []
+        mem = 2**mem_pow
+        for trace in skew_traces:
+            tracename = f"{os.path.basename(trace).removesuffix('.pcap')}-pow-{mem_pow}.csv"
+            variant_results = os.path.join(output_dir, "original", "dynamic", tracename)
+            skew_estimation_results = os.path.join(output_dir, "original", "skew_estimates", tracename)
+            by_mem[mem_pow].append(variant_results)
+            tasks.append((dynamic_performance_fixed_mem_real_world_task, [trace, variant_results, skew_estimation_results, mem]))
+
+    if should_run_tasks:
+        run_tasks(tasks)
+
+    for mem_pow, traces in by_mem.items():
+        results = { os.path.basename(trace).split('-')[0]: trace for trace in traces }
+        util.transform_results(results, ["equinix", "univ1", "univ2"], "trace", os.path.join(transformed_dir, f"mem-{mem_pow}"))
+
 
 
 def dynamic_performance_fixed_mem_synthetic_task(trace, variant_results, skew_estimation_results, mem):
@@ -316,6 +358,8 @@ if __name__ == "__main__":
         baseline_performance_fixed_mem_real_world("final_baseline_real_world_fixed_mem")
     elif experiment == "dynamic_synthetic":
        dynamic_performance_fixed_mem_synthetic("final_dynamic_synthetic_fixed_mem")
+    elif experiment == "dynamic_real_world":
+       dynamic_performance_fixed_mem_real_world("final_dynamic_real_world_fixed_mem")
     elif experiment == "merge_traces":
         dir = sys.argv[2]
         starts_with = sys.argv[3]

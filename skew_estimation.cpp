@@ -40,7 +40,6 @@ double estimate_harmonic_number(
   int i = 0;
 
   double inv_total = 1.0 / (double)N;
-  // double inv_k = 1.0 / (double)k;
 
   std::vector<double> estimates;
   //  Loop in inverse order since largest is at the end
@@ -108,9 +107,7 @@ double cost_topk_skew_old(
     int N, int k, double skew, double harmonic_n,
     std::vector<pair<std::array<char, FT_SIZE>, uint32_t>>::iterator start,
     std::vector<pair<std::array<char, FT_SIZE>, uint32_t>>::iterator end) {
-  // printf("Skew: %f\n", skew);
   double cost = 0.0;
-  // double inv_harmonic_n = 1.0 / get_harmonic_number_or_calc(1 << 26, skew);
   double inv_harmonic_n = 1.0 / harmonic_n;
   double inv_n = 1.0 / (double)N;
 
@@ -119,11 +116,8 @@ double cost_topk_skew_old(
   for (auto it = end; it != start; --it) {
     i++;
     uint32_t count = it->second;
-    // printf("i: %d, count: %d\n", i, count);
     double expected = inv_harmonic_n / (pow((double)i, skew));
     double actual = inv_n * (double)count;
-    // printf("Frequency for %i: %f (expected=%f), inv_harmonic_n=%f, pow(i,
-    // skew)=%f\n", i, actual, expected, inv_harmonic_n, pow((double)i, skew));
 
     double diff = expected - actual;
     cost += diff * diff;
@@ -145,7 +139,7 @@ double small_set_estimate_skew(
   double best_skew = 0.0;
   double best_skew_cost = std::numeric_limits<double>::infinity();
 
-  for (int i = 0; i < steps; i++) {
+  for (int i = 0; i <= steps; i++) {
     double skew = skew_start + i * delta_skew;
 
     double cost = cost_topk_skew(N, k, skew, start, end);

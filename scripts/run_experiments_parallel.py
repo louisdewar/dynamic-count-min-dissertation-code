@@ -339,18 +339,6 @@ def test_flat_top_k(output_dir, k, mem_pow, hash_functions, estimate_frequency):
     run_tasks(tasks)
 
 
-    # for key, file in histogram_results.items():
-    #     skew = key.split('-')[5]
-    #     graph_output = os.path.join(output_dir, key + ".png")
-    #     print(f"Generating histogram {graph_output}")
-    #     topk_histogram_graph(file, graph_output, f"Histogram of topK for skew f{skew}")
-
-    # for key, file in skew_cost_results.items():
-    #     skew = key.split('-')[5]
-    #     graph_output = os.path.join(output_dir, "topk-skew-cost-" + key + ".png")
-    #     print(f"Generating skew cost graph {graph_output}")
-    #     subprocess.run(["/bin/sh", "-c", f"graph '{file}' -o '{graph_output}' --title 'Skew cost analysis where true skew={skew}' --figsize '1600x1000'"])
-
 # This command is a bit unusual in that it acts over different groups of results already produced as opposed to creating new results
 # This finds lower and upper bounds for the optimal number of hash functions across different sets of results (different counter amounts)
 # by looking at the `lower_bound.csv` in each error metric.
@@ -448,9 +436,6 @@ def convert_pcap_task(pcap, converted_path):
 
 
 def convert_pcap_gz(pcap_folder, output_dir):
-    # if os.path.exists(output_dir):
-    #     shutil.rmtree(output_dir)
-
     converted_dir = os.path.join(output_dir, "converted")
     if not os.path.exists(output_dir):
         os.makedirs(converted_dir)

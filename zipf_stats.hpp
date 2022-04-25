@@ -70,11 +70,3 @@ void print_cached_skews() {
     printf("For skew %f, cached harmonic number: %f\n", skew, harmonic_n);
   }
 }
-
-// class ZipTable {
-// private:
-//   int start;
-//   int end;
-//
-// public:
-// }

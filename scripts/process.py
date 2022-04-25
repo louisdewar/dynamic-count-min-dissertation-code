@@ -256,6 +256,3 @@ def average_results(output_dir, groups, avr_columns):
 
         output_f.flush()
         output_f.close()
-
-if __name__ == '__main__':
-    topk_histogram_graph('results/top-k-100-14-8/averaged/top-100-hash-8-skew-1.1-top_k.csv', "output.png", "Histogram of topK for skew 1.1")

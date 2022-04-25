@@ -6,7 +6,6 @@
 PacketCounter::PacketCounter(int length) {
   this->buf = new int[length];
 
-  // Probably unnecessary
   for (int i = 0; i < length; i++) {
     this->buf[i] = 0;
   }
@@ -42,13 +41,9 @@ int PacketCounter::query_index(int index) {
 
 void PacketCounter::reset() { memset(this->buf, 0, sizeof(int) * this->len); }
 
-HashPacketCounter::HashPacketCounter(int length) {
-  // this->map
-}
+HashPacketCounter::HashPacketCounter(int length) {}
 
-HashPacketCounter::~HashPacketCounter() {
-  // delete[] this->buf;
-}
+HashPacketCounter::~HashPacketCounter() {}
 
 int HashPacketCounter::increment(char *str) {
   std::array<char, FT_SIZE> flow_id;
@@ -74,12 +69,3 @@ int HashPacketCounter::query(char *str) {
 
   return val->second;
 }
-
-// int HashPacketCounter::query_index(int index) {
-//   // assert(index < this->len && "Index outside of range");
-//   return this->map.find(const key_type &__x);
-// }
-
-// void HashPacketCounter::reset() {
-//   memset(this->buf, 0, sizeof(int) * this->len);
-// }

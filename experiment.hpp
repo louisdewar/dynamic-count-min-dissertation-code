@@ -2,7 +2,6 @@
 
 #include "CMS.hpp"
 #include "Counter.hpp"
-#include "HashMap.hpp"
 #include "TraceReader.hpp"
 #include "skew_estimation.hpp"
 #include "topK.hpp"
@@ -74,7 +73,6 @@ void run_experiment_fixed_mem(char *zipfPath, FILE *results, int hashFunctions,
 
   heavy_hitter_err = sqrt(heavy_hitter_err / (long double)i);
 
-  // double alpha = 2.0 * exp(1.0);
   long double failure_prob = 1.0;
 
   threshold = (int)(alpha * (float)n / (float)mem);
@@ -103,16 +101,12 @@ void run_experiment(char *zipfPath, const char *resultsPath,
   int size = 128;
   const int maxSize = 1024 * 256;
   size = maxSize;
-  // const int maxSize = 16 * 1024 * 1024;
 
   printf("Writing n=%d to %s\n", hashFunctions, resultsPath);
   FILE *results = fopen(resultsPath, "w");
   fprintf(results, "memory,normalized error\n");
 
-  // size_t cap = 1 << 28;
-  // HashMapCounter* counter = new HashMapCounter(cap, 101);
   PacketCounter *counter = new PacketCounter(1 << 27);
-  // unordered_map<char[FT_SIZE], long, PacketHash> counter;
   while (size <= maxSize) {
     counter->reset();
     BOBHash hasher = BOBHash(177);
@@ -139,7 +133,6 @@ void run_experiment(char *zipfPath, const char *resultsPath,
       }
 
       sketch->increment(dest);
-      // int actual = ++(counter[dest]);
       int actual = counter->increment(dest);
       int countMin = sketch->query(dest);
 
@@ -256,11 +249,5 @@ void run_experiment_flat_top_k(FILE *skew_estimate, char *zipfPath, int mem,
     }
 
     i++;
-
-    // if (i % estimateFrequency == 0) {
-    //   double estimate = sketch->estimate_skew();
-    //   fprintf(skew_estimate, "%d,%f\n", i, estimate);
-    //   printf("%d,%f\n", i, estimate);
-    // }
   }
 }

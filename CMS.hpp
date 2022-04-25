@@ -14,6 +14,7 @@
 #include <iostream>
 #include <math.h>
 #include <random>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -87,7 +88,6 @@ class CountMinFlat : public EvaluatableSketch {
 
 public:
   int hash_count;
-  // TODO: change key to std::array or maybe custom type without need for a map
   TopK *topK;
 
   CountMinFlat(int k);
@@ -111,7 +111,6 @@ class CountMinTopK : public EvaluatableSketch {
 
 public:
   int height;
-  // TODO: change to std::array or maybe custom type without need for a map
   TopK *topK;
   uint32_t **baseline_cms;
 
@@ -132,6 +131,7 @@ public:
 class DynamicCountMin : public EvaluatableSketch {
   int width;
   int counter;
+  bool use_bounds;
 
   int width_mask;
 
@@ -145,10 +145,11 @@ class DynamicCountMin : public EvaluatableSketch {
 
 public:
   int hash_count;
-  // TODO: change key to std::array or maybe custom type without need for a map
   TopK *topK;
 
-  DynamicCountMin(int k, ErrorMetric optimisation_target);
+  // set `use_bounds` to use the error bounds, otherwise it uses the lowest
+  // average error configuration.
+  DynamicCountMin(int k, ErrorMetric optimisation_target, bool use_bounds);
   ~DynamicCountMin();
 
   void initialize(int width, int hash_count, int seed);

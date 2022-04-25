@@ -1,5 +1,7 @@
 // Code adapted from SALSA:
 // https://github.com/SALSA-ICDE2021/SALSA/tree/main/Salsa
+// Specifically the CountMinBaseline comes from SALSA with the other sketches
+// being adaptations of that.
 
 #include <assert.h>
 #include <chrono>
@@ -292,9 +294,10 @@ void CountMinTopK::print_indexes(const char *str) {
 
 int CountMinTopK::get_hash_function_count() { return this->height; }
 
-DynamicCountMin::DynamicCountMin(int k, ErrorMetric metric) {
+DynamicCountMin::DynamicCountMin(int k, ErrorMetric metric, bool use_bounds) {
   this->topK = new TopK(k);
   this->optimisation_target = metric;
+  this->use_bounds = use_bounds;
 }
 
 DynamicCountMin::~DynamicCountMin() {
@@ -345,19 +348,27 @@ void DynamicCountMin::dynamic_reconfigure() {
 
   int lower = 0;
   int upper = 0;
-  optimal_bounds(skew, &upper, &lower, this->optimisation_target);
+  int best = 0;
+  optimal_bounds(skew, &upper, &lower, &best, this->optimisation_target);
   // Currently we don't use upper but it might have a use if we want to
   // repeatedly dynamically configure as we can avoid going to too few hash
   // functions too quickly
   (void)upper;
 
-  if (lower < this->hash_count) {
+  int new_config;
+  if (this->use_bounds) {
+    new_config = lower;
+  } else {
+    new_config = best;
+  }
+
+  if (new_config < this->hash_count) {
     printf("Dyanmic reconfigure from %d to %d (skew=%f)\n", this->hash_count,
-           lower, skew);
-    this->hash_count = lower;
+           new_config, skew);
+    this->hash_count = new_config;
   } else {
     printf("Unable to dyanmic reconfigure from %d to %d (skew=%f)\n",
-           this->hash_count, lower, skew);
+           this->hash_count, new_config, skew);
   }
 }
 
