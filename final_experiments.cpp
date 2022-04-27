@@ -28,8 +28,7 @@ public:
   void handle_packet(char *packet, int actual, double seen_packets) {
     this->sketch->increment(packet);
     int estimate = sketch->query(packet);
-    double diff = (1.0 / seen_packets) * (estimate - actual);
-    // printf("diff: %f\n", diff);
+    double diff = estimate - actual;
     this->sum_sq_err += diff * diff;
   }
 
@@ -47,7 +46,6 @@ public:
   double heavy_hitter_err_real_world(TopK trueTopK, int threshold, long total) {
     auto items = trueTopK.items();
     long double heavy_hitter_sq_sum_err = 0.0;
-    long double inv_total = 1.0 / (double)total;
     int heavy_hitters = 0;
     for (auto it = --items.end(); it >= items.begin(); --it) {
       uint32_t actual = it->second;
@@ -59,7 +57,7 @@ public:
 
       int estimate = sketch->query(packet);
       long double err =
-          inv_total * ((long double)actual - (long double)estimate);
+          ((long double)actual - (long double)estimate) / (long double)total;
 
       heavy_hitters++;
       heavy_hitter_sq_sum_err += err * err;
@@ -69,7 +67,7 @@ public:
       return 0.0;
     }
 
-    return sqrt((heavy_hitter_sq_sum_err / (long double)heavy_hitters));
+    return sqrt(heavy_hitter_sq_sum_err / (long double)heavy_hitters);
   }
 
   double heavy_hitter_err(PacketCounter *counter, int threshold, long total) {
@@ -79,7 +77,6 @@ public:
     int less_than_threshold = 0;
     int packet_index = 1;
     int heavy_hitters = 0;
-    long double inv_total = 1.0 / (double)total;
     // After seeing 10 entries less than the threshold we assume there won't be
     // any more (the loop is in order of decreasing expected frequency).
     while (less_than_threshold < 10) {
@@ -104,7 +101,7 @@ public:
       int estimate = sketch->query(packet);
 
       long double err =
-          inv_total * ((long double)actual - (long double)estimate);
+          ((long double)actual - (long double)estimate) / (long double)total;
       heavy_hitters++;
       heavy_hitter_sq_sum_err += err * err;
     }
@@ -113,7 +110,7 @@ public:
       return 0.0;
     }
 
-    return sqrt((heavy_hitter_sq_sum_err / (long double)heavy_hitters));
+    return sqrt(heavy_hitter_sq_sum_err / (long double)heavy_hitters);
   }
 };
 

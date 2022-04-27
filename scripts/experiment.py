@@ -129,7 +129,7 @@ def baseline_performance_fixed_mem_synthetic(output_dir):
     ensure_dir_exists(flat_averaged_dir)
     ensure_dir_exists(traditional_averaged_dir)
 
-    mem_pows = [16, 18, 20]
+    mem_pows = [16, 20]
     #mem_pows = [12]
 
     skew_traces = find_traces()
@@ -165,7 +165,7 @@ def baseline_performance_fixed_mem_synthetic(output_dir):
     if should_run_tasks:
         run_tasks(tasks)
 
-    avr_columns = ["normalized error", "heavy hitter error", "sketch error e", "sketch error 2e", "sketch error 4e", "sketch error 8e"]
+    avr_columns = ["normalized error", "heavy hitter error"]#, "sketch error e", "sketch error 2e", "sketch error 4e", "sketch error 8e"]
     util.average_results(traditional_averaged_dir, traditional_average_groups, avr_columns)
     util.average_results(flat_averaged_dir, flat_average_groups, avr_columns)
 
@@ -202,7 +202,7 @@ def baseline_performance_fixed_mem_real_world(output_dir):
 
     skew_traces = find_real_world_final_traces()
 
-    mem_pows = [10, 12, 14, 16, 18]
+    mem_pows = [12]
 
     tasks = []
     by_mem = {}
@@ -314,7 +314,7 @@ def dynamic_performance_fixed_mem_synthetic(output_dir):
     if should_run_tasks:
         run_tasks(tasks)
 
-    avr_columns = ["normalized error", "heavy hitter error", "sketch error e", "sketch error 2e", "sketch error 4e", "sketch error 8e"]
+    avr_columns = ["normalized error", "heavy hitter error"]#, "sketch error e", "sketch error 2e", "sketch error 4e", "sketch error 8e"]
     util.average_results(dynamic_averaged_dir, dynamic_average_groups, avr_columns)
     # util.average_results(averaged_dir, average_groups, ["normalized error", "heavy hitter error", "sketch error"])
 

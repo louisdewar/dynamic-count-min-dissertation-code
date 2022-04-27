@@ -3,13 +3,21 @@
 This repo contains the code for my 2022 dynamic count-min dissertation supervised by Dr Ran Ben Basat at University College London.
 Details for how to use it, including building the source code can be found in the appendix of the main dissertation in the section called "System Manual".
 
+You can find a copy of the dissertation [here](./Dissertation.pdf).
+
+## Contact details
+
+If you wish to get in contact with the author and/or the supervisor they can be reached at:
+- Louis de Wardt: contact [ at ] louis.dewardt.uk ([https://louis.dewardt.uk](https://louis.dewardt.uk))
+- Dr Ran Ben Basat: r.benbasat [ at ] cs.ucl.ac.uk ([http://www.bbasat.com](http://www.bbasat.com))
+
 ## Overview of C++ files
 
 - `main.cpp` the entrypoint, uses the CLI args to decide which experiment to run and with what parameters.
 - `CMS.cpp` / `CMS.hpp`, contains all the sketches used by this project including an implementation of the final dynamic sketch. The baseline sketch was originally from SALSA, but it was adapted in several different ways for this project.
 - `topK.cpp` / `topK.hpp`, a top-k data structure slightly adapted from SALSA in order to be more convenient to work with.
 - `final_experiments.cpp` / `final_experiments.hpp` the functions implementing experiments that were used for the final dissertation.
-- `experiment.hpp` some experiments that were used throughout the project, although `final_experiments` should be preferred.
+- `experiment.hpp` some experiments that were used throughout the project, although `final_experiments` should be preferred since it is much more polished.
 - `genzipf.h` code to generate zipf traces, it is untouched from SALSA where it was used from another project.
 - `skew_estimation.cpp` / `skew_estimation.hpp` code for estimation of skews. It includes the final estimation technique along with some debugging methods.
 - `optimal_paramaters.cpp` / `optimal_paramaters.hpp` contains code for finding the pre-determined optimal parameters based on estimated skew and error metric.
